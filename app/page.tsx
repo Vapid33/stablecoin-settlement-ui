@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useEffect } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { set } from "date-fns"
 
 
 
@@ -44,7 +45,7 @@ type Transaction = {
   id: string
   time: string
   orderId: string
-  type: "PAYMENT" | "SETTLE"
+  type: string
   amount: number
   amountCNY: number
   merchantId: string
@@ -53,11 +54,12 @@ type Transaction = {
 }
 
 type ApiOrderItem = {
+  orderState: string
   offChain: {
     id: number
     transactionTime: string
     referenceNumber: string
-    messageType: string
+    orderState: string
     transactionTypeCode: string
     transactionAmount: number
     merchantId: string
@@ -78,7 +80,7 @@ type ApiOrderResponse = {
 }
 
 export default function WorkflowPage() {
-  const [workDate, setWorkDate] = useState("20251225")
+  const [workDate, setWorkDate] = useState(formatDateToYYYYMMDD(new Date()))
   const [lastRefreshTime, setLastRefreshTime] = useState(new Date())
   const [isPaused, setIsPaused] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -170,6 +172,74 @@ export default function WorkflowPage() {
     }
   }
 
+function formatDateToYYYYMMDD(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份是从0开始的，所以要加1
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
+}
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms))
+const handleBatchExecute = async () => {
+  try {
+    // ① 调接口 A
+    const res = await fetch(
+      "http://172.20.10.6:8088/settleTask/init",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settleDt: workDate,
+          jobNo: 0,
+        }),
+      }
+    )
+
+    const result = await res.json()
+    await sleep(1000)
+    if (result.statusCode !== "00") {
+      setTasks([])
+      return
+    }
+
+    const list: WorkflowTask[] = result.data.map((item: any) => ({
+      id: String(item.id),
+      name: item.jobName,
+      batchNumber: String(item.jobCode),
+      settlementDate: `${item.settleDt.slice(0, 4)}/${item.settleDt.slice(4, 6)}/${item.settleDt.slice(6, 8)}`,
+      plannedStartTime: item.planStartTime,
+      actualStartTime: item.realStartTime ?? null,
+      plannedEndTime: item.planEndTime,
+      actualEndTime: item.realEndTime ?? null,
+      status: mapTaskStatus(item.status),
+      hasDownload: Boolean(item.filePath),
+      filePath: item.filePath ? item.filePath : "",
+    }))
+
+    setTasks(list)
+    const jobList: { jobNo: number; state: number }[] = result.data
+
+    // ② 按顺序串行执行
+    for (let i=0; i<5; i++) {
+      const success = await handleStepExecute(
+        workDate,
+        i+""
+      )
+      await sleep(1000) // 每步间隔 1 秒
+
+      // ❗ 如果你希望“失败就中断”
+      if (!success) {
+        console.warn(`作业 ${i} 执行失败，停止后续执行`)
+        break
+      }
+    }
+
+    // ③ 最终刷新一次（强烈建议）
+    //fetchWorkflowTasks(workDate)
+  } catch (error) {
+    console.error("场次执行失败", error)
+  }
+}
   // 页面加载时，获取余额
   useEffect(() => {
     fetchBalance()
@@ -195,7 +265,10 @@ export default function WorkflowPage() {
     setIsPaused(!isPaused)
   }
 
-  const handleStepExecute = async (settle_dt: string, batchNo: string) => {
+  const handleStepExecute = async (
+  settle_dt: string,
+  batchNo: string
+): Promise<boolean> =>  {
     const settleDt = settle_dt.replaceAll("/", "")
     // ① 先把当前任务状态改为【执行中】
     setTasks((prev) =>
@@ -233,6 +306,7 @@ export default function WorkflowPage() {
               : task
           )
         )
+        return true
       } else {
         // ③ 执行失败 → 更新为失败
         setTasks((prev) =>
@@ -242,6 +316,7 @@ export default function WorkflowPage() {
               : task
           )
         )
+        return false
       }
     } catch (error) {
       console.error("单步执行失败", error)
@@ -254,6 +329,7 @@ export default function WorkflowPage() {
             : task
         )
       )
+      return false
     } finally {
       // ④ 最终以“后端为准”刷新一次任务列表（强烈建议）
       // fetchWorkflowTasks(settle_dt)
@@ -284,7 +360,7 @@ export default function WorkflowPage() {
 
       // 2️⃣ 从 header 中解析文件名
       const disposition = res.headers.get("Content-Disposition")
-      let fileName = `${taskName}.dat`
+      let fileName = `${taskName}`
 
       if (disposition) {
         const match = disposition.match(/filename\*=UTF-8''(.+)|filename="?([^"]+)"?/)
@@ -387,7 +463,7 @@ export default function WorkflowPage() {
             hour12: false,
           }),
           orderId: off.referenceNumber,
-          type: off.messageType === "0200" ? "PAYMENT" : "SETTLE",
+          type: item.orderState ,
           amount: off.transactionAmount,
           amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
           merchantId: off.merchantId || "--",
@@ -397,6 +473,7 @@ export default function WorkflowPage() {
       })
 
       setTransactions(list)
+      console.log("交易列表：", list)
       setTotalPages(Math.ceil(result.data.totalNum / pageSize))
     } catch (error) {
       console.error("查询交易列表失败", error)
@@ -428,13 +505,13 @@ export default function WorkflowPage() {
     const list: WorkflowTask[] = json.data.map((item: any) => ({
       id: String(item.id),
       name: item.jobName,
-      batchNumber: String(item.batchNo),
+      batchNumber: String(item.jobCode),
       settlementDate: `${item.settleDt.slice(0, 4)}/${item.settleDt.slice(4, 6)}/${item.settleDt.slice(6, 8)}`,
       plannedStartTime: item.planStartTime,
       actualStartTime: item.realStartTime ?? null,
       plannedEndTime: item.planEndTime,
       actualEndTime: item.realEndTime ?? null,
-      status: mapTaskStatus(item.status),
+      status: mapTaskStatus(item.status+""),
       hasDownload: Boolean(item.filePath),
       filePath: item.filePath ? item.filePath : "",
     }))
@@ -512,12 +589,12 @@ export default function WorkflowPage() {
                             <Badge
                               variant="outline"
                               className={
-                                tx.type === "PAYMENT"
+                                tx.type === "完成"
                                   ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
                                   : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                               }
                             >
-                              {tx.type === "PAYMENT" ? "消费" : "退货"}
+                              {tx.type}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
@@ -577,12 +654,14 @@ export default function WorkflowPage() {
           <div className="p-6 border-b border-slate-200">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-slate-900">稳定币清结算工作流</h2>
+
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>系统刷新时间：</span>
                 <span className="font-mono text-slate-700">
                   {lastRefreshTime.toLocaleTimeString("zh-CN", { hour12: false })}
                 </span>
               </div>
+
             </div>
 
             <div className="flex flex-wrap items-end gap-6">
@@ -599,7 +678,17 @@ export default function WorkflowPage() {
                   placeholder="YYYYMMDD"
                 />
               </div>
-
+              
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleBatchExecute} // 你的场次执行函数
+                >
+                  场次执行
+                </Button>
+              </div>
               {/* <div className="flex gap-3 ml-auto">
                 <Button onClick={handleRefresh} variant="outline" className="gap-2 bg-transparent">
                   <RefreshCw className="size-4" />
@@ -622,7 +711,7 @@ export default function WorkflowPage() {
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
                   <TableHead className="font-semibold text-slate-700 w-[240px] pl-12">作业名称</TableHead>
-                  <TableHead className="font-semibold text-slate-700 w-[100px]">批次号</TableHead>
+                  <TableHead className="font-semibold text-slate-700 w-[100px]">作业号</TableHead>
                   <TableHead className="font-semibold text-slate-700 w-[120px]">请求清算日</TableHead>
                   <TableHead className="font-semibold text-slate-700 w-[120px]">计划执行时间</TableHead>
                   <TableHead className="font-semibold text-slate-700 w-[120px]">实际执行时间</TableHead>
