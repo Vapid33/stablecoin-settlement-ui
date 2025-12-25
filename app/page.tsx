@@ -140,7 +140,7 @@ export default function WorkflowPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [filePath, setFilePath] = useState<string>("")
-  const pageSize = 10
+  const pageSize = 5
   const [balance, setBalance] = useState<string>("1.00") // 初始余额
   const [tokenSymbol, setTokenSymbol] = useState<string>("USDT") // 初始币种
   const [userAddress, setUserAddress] = useState<string>("0x888...C1D2") // 初始用户地址
