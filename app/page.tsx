@@ -804,7 +804,7 @@ const handleBatchExecute = async () => {
 
                       className={
 
-                        selectedTransaction.type === "PAYMENT"
+                        selectedTransaction.type === "消费"
 
                           ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
 
@@ -814,7 +814,7 @@ const handleBatchExecute = async () => {
 
                     >
 
-                      {selectedTransaction.type === "PAYMENT" ? "消费" : "退货"}
+                      {selectedTransaction.type }
 
                     </Badge>
 
