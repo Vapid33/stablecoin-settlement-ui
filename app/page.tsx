@@ -361,7 +361,7 @@ export default function WorkflowPage() {
   const fetchTransactions = async (page: number) => {
     try {
       const res = await fetch(
-        "http://127.0.0.1:4523/m1/7468733-7203316-default/admin/queryOrderList",
+        "http://172.20.10.6:8088//admin/queryOrderList",
         {
           method: "POST",
           headers: {
