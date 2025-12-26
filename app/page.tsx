@@ -65,6 +65,7 @@ type ApiOrderItem = {
     merchantId: string
     terminalId: string
     chainTransactionHash: string
+    createdAt:string
   }
 }
 
@@ -142,7 +143,7 @@ export default function WorkflowPage() {
   const [filePath, setFilePath] = useState<string>("")
   const pageSize = 5
   const [balance, setBalance] = useState<string>("1.00") // 初始余额
-  const [tokenSymbol, setTokenSymbol] = useState<string>("USDT") // 初始币种
+  const [tokenSymbol, setTokenSymbol] = useState<string>("USDC") // 初始币种
   const [userAddress, setUserAddress] = useState<string>("0x888...C1D2") // 初始用户地址
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
@@ -162,7 +163,7 @@ export default function WorkflowPage() {
 
       if (data.statusCode === "00") {
         setBalance(data.data.balance || "0.00") // 获取余额
-        setTokenSymbol(data.data.tokenSymbol || "USDT") // 获取币种（USDT 或其他）
+        setTokenSymbol(data.data.tokenSymbol || "USDC") // 获取币种（USDT 或其他）
         setUserAddress(data.data.userAddress || "0x888...C1D2") // 获取用户地址
       } else {
         console.log("获取余额失败，请稍后重试")
@@ -452,9 +453,7 @@ const handleBatchExecute = async () => {
 
         return {
           id: String(off.id),
-          time: new Date(off.transactionTime).toLocaleTimeString("zh-CN", {
-            hour12: false,
-          }),
+          time: off.createdAt,
           orderId: off.referenceNumber,
           type: item.orderState ,
           amount: off.transactionAmount,
@@ -569,7 +568,6 @@ const handleBatchExecute = async () => {
                         <TableHead className="font-semibold text-slate-700">商户号</TableHead>
                         <TableHead className="font-semibold text-slate-700">终端号</TableHead>
                         <TableHead className="font-semibold text-slate-700">用户付款金额</TableHead>
-                        <TableHead className="font-semibold text-slate-700">商户收款金额</TableHead>
                         <TableHead className="font-semibold text-slate-700">区块链交易详情</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -592,8 +590,7 @@ const handleBatchExecute = async () => {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
                           <TableCell className="font-mono text-sm">{tx.terminalId}</TableCell>
-                          <TableCell className="font-semibold text-blue-600">{tx.amount} USDT</TableCell>
-                          <TableCell className="font-semibold text-emerald-600">{tx.amountCNY} CNY</TableCell>
+                          <TableCell className="font-semibold text-blue-600">{tx.amount} USDC</TableCell>
                           <TableCell>
                             <a
                               href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
