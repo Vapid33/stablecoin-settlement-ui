@@ -180,6 +180,13 @@ function formatDateToYYYYMMDD(date: Date): string {
 }
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+const shortenHash = (hash: string, start = 6, end = 6) => {
+  if (!hash) return "--"
+  if (hash.length <= start + end) return hash
+  return `${hash.slice(0, start)}...${hash.slice(-end)}`
+}
+
 const handleBatchExecute = async () => {
   try {
     // ① 调接口 A
@@ -226,7 +233,7 @@ const handleBatchExecute = async () => {
         i+""
       )
       await sleep(1000) // 每步间隔 1 秒
-
+      fetchWorkflowTasks(workDate)
       // ❗ 如果你希望“失败就中断”
       if (!success) {
         console.warn(`作业 ${i} 执行失败，停止后续执行`)
@@ -384,20 +391,6 @@ const handleBatchExecute = async () => {
       console.error("文件下载异常", error)
       alert("文件下载失败，请稍后重试")
     }
-  }
-
-  const handleViewOnScan = (txHash: string) => {
-
-    const transaction = transactions.find((tx) => tx.txHash === txHash)
-
-    if (transaction) {
-
-      setSelectedTransaction(transaction)
-
-      setIsDetailDialogOpen(true)
-
-    }
-
   }
 
 
@@ -602,15 +595,18 @@ const handleBatchExecute = async () => {
                           <TableCell className="font-semibold text-blue-600">{tx.amount} USDT</TableCell>
                           <TableCell className="font-semibold text-emerald-600">{tx.amountCNY} CNY</TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="link"
-                              className="h-auto p-0 gap-1 text-blue-600"
-                              onClick={() => handleViewOnScan(tx.txHash)}
+                            <a
+                              href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                              title={tx.txHash} // hover 显示完整 hash
                             >
-                              <span className="font-mono text-xs">{tx.txHash}</span>
+                              <span className="font-mono text-xs">
+                                {shortenHash(tx.txHash)}
+                              </span>
                               <ExternalLink className="size-3" />
-                            </Button>
+                            </a>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -762,248 +758,7 @@ const handleBatchExecute = async () => {
           </div>
         </Card>
       </div>
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
 
-        <DialogContent className="max-w-2xl">
-
-          <DialogHeader>
-
-            <DialogTitle className="text-xl font-semibold">交易详情</DialogTitle>
-
-            <DialogDescription>查看完整的区块链交易信息</DialogDescription>
-
-          </DialogHeader>
-
-
-
-          {selectedTransaction && (
-
-            <div className="space-y-4 mt-4">
-
-              <div className="grid grid-cols-2 gap-4">
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">交易时间</div>
-
-                  <div className="text-base font-mono">{selectedTransaction.time}</div>
-
-                </div>
-
-
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">交易类型</div>
-
-                  <div>
-
-                    <Badge
-
-                      variant="outline"
-
-                      className={
-
-                        selectedTransaction.type === "消费"
-
-                          ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-
-                          : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-
-                      }
-
-                    >
-
-                      {selectedTransaction.type }
-
-                    </Badge>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-
-
-              <div className="space-y-2">
-
-                <div className="text-sm font-medium text-muted-foreground">订单号</div>
-
-                <div className="flex items-center gap-2">
-
-                  <code className="flex-1 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono">
-
-                    {selectedTransaction.orderId}
-
-                  </code>
-
-                  <Button size="sm" variant="ghost" onClick={() => handleCopy(selectedTransaction.orderId, "orderId")}>
-
-                    {copiedField === "orderId" ? (
-
-                      <Check className="size-4 text-emerald-600" />
-
-                    ) : (
-
-                      <Copy className="size-4" />
-
-                    )}
-
-                  </Button>
-
-                </div>
-
-              </div>
-
-
-
-              <div className="grid grid-cols-2 gap-4">
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">商户号</div>
-
-                  <code className="block px-3 py-2 bg-slate-50 rounded-md text-sm font-mono">
-
-                    {selectedTransaction.merchantId}
-
-                  </code>
-
-                </div>
-
-
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">终端号</div>
-
-                  <code className="block px-3 py-2 bg-slate-50 rounded-md text-sm font-mono">
-
-                    {selectedTransaction.terminalId}
-
-                  </code>
-
-                </div>
-
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">使用的Gas</div>
-
-                  <code className="block px-3 py-2 bg-slate-50 rounded-md text-sm font-mono">
-
-                    45047
-
-                  </code>
-
-                </div>
-
-
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">Gas费用</div>
-
-                  <code className="block px-3 py-2 bg-slate-50 rounded-md text-sm font-mono">
-
-                    0.000000054056490094 ETH
-
-                  </code>
-
-                </div>
-
-              </div>
-
-
-
-              <div className="grid grid-cols-2 gap-4">
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">用户付款金额</div>
-
-                  <div className="text-lg font-semibold text-blue-600">{selectedTransaction.amount} USDT</div>
-
-                </div>
-
-
-
-                <div className="space-y-2">
-
-                  <div className="text-sm font-medium text-muted-foreground">商户收款金额</div>
-
-                  <div className="text-lg font-semibold text-emerald-600">{selectedTransaction.amountCNY} CNY</div>
-
-                </div>
-
-              </div>
-
-
-
-              <div className="space-y-2">
-
-                <div className="text-sm font-medium text-muted-foreground">区块链交易哈希</div>
-
-                <div className="flex items-center gap-2">
-
-                  <code className="flex-1 px-3 py-2 bg-slate-50 rounded-md text-sm font-mono break-all">
-
-                    {selectedTransaction.txHash}
-
-                  </code>
-
-                  <Button size="sm" variant="ghost" onClick={() => handleCopy(selectedTransaction.txHash, "txHash")}>
-
-                    {copiedField === "txHash" ? (
-
-                      <Check className="size-4 text-emerald-600" />
-
-                    ) : (
-
-                      <Copy className="size-4" />
-
-                    )}
-
-                  </Button>
-
-                </div>
-
-              </div>
-
-
-
-              {/* <div className="pt-4 border-t">
-
-                <Button
-
-                  className="w-full gap-2"
-
-                  onClick={() => {
-
-                    window.open(`https://etherscan.io/tx/${selectedTransaction.txHash}`, "_blank")
-
-                  }}
-
-                >
-
-                  <ExternalLink className="size-4" />
-
-                  在区块链浏览器中查看
-
-                </Button>
-
-              </div> */}
-
-            </div>
-
-          )}
-
-        </DialogContent>
-
-      </Dialog>
     </div>
   )
 }
