@@ -315,27 +315,27 @@ const handleBatchExecute = async () => {
 
       const result = await res.json()
       fetchWorkflowTasks(workDate)
-      // if (result.statusCode === "00") {
-      //   // ② 执行成功 → 更新为成功
-      //   setTasks((prev) =>
-      //     prev.map((task) =>
-      //       task.batchNumber === batchNo
-      //         ? { ...task, status: "completed" }
-      //         : task
-      //     )
-      //   )
-      //   return true
-      // } else {
-      //   // ③ 执行失败 → 更新为失败
-      //   setTasks((prev) =>
-      //     prev.map((task) =>
-      //       task.batchNumber === batchNo
-      //         ? { ...task, status: "error" }
-      //         : task
-      //     )
-      //   )
-      //   return false
-      // }
+      if (result.statusCode === "00") {
+        // ② 执行成功 → 更新为成功
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.batchNumber === batchNo
+              ? { ...task, status: "completed" }
+              : task
+          )
+        )
+        return true
+      } else {
+        // ③ 执行失败 → 更新为失败
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.batchNumber === batchNo
+              ? { ...task, status: "error" }
+              : task
+          )
+        )
+        return false
+      }
     } catch (error) {
       console.error("单步执行失败", error)
 
