@@ -47,6 +47,7 @@ type Transaction = {
   orderId: string
   type: string
   amount: number
+  tokenSymbol: string
   amountCNY: number
   merchantId: string
   terminalId: string
@@ -66,6 +67,7 @@ type ApiOrderItem = {
     terminalId: string
     chainTransactionHash: string
     createdAt:string
+    tokenSymbol: string
   }
 }
 
@@ -148,6 +150,7 @@ export default function WorkflowPage() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [balanceList, setBalanceList] = useState<{ tokenSymbol: string; balance: string }[]>([])
 
 
   const fetchBalance = async () => {
@@ -155,16 +158,23 @@ export default function WorkflowPage() {
       const res = await fetch("http://172.20.10.6:8088/admin/getBalance", {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           accept: "*/*",
         },
-        body: "", // 和 curl -d '' 一致
+        body:JSON.stringify({
+          primaryAccountNumber: '625807******4153',
+        }), // 和 curl -d '' 一致
       })
       const data = await res.json()
 
       if (data.statusCode === "00") {
-        setBalance(data.data.balance || "0.00") // 获取余额
-        setTokenSymbol(data.data.tokenSymbol || "USDC") // 获取币种（USDT 或其他）
-        setUserAddress(data.data.userAddress || "0x888...C1D2") // 获取用户地址
+        const balances = data.data.map((item: any) => ({
+          tokenSymbol: item.tokenSymbol,
+          balance: item.balance,
+        }))
+
+        setBalanceList(balances)
+        setUserAddress(data.data[0].userAddress || "0x888...C1D2") // 获取用户地址
       } else {
         console.log("获取余额失败，请稍后重试")
       }
@@ -461,6 +471,7 @@ const handleBatchExecute = async () => {
           merchantId: off.merchantId || "--",
           terminalId: off.terminalId || "--",
           txHash: off.chainTransactionHash,
+          tokenSymbol:off.tokenSymbol || "USDC",
         }
       })
 
@@ -546,9 +557,20 @@ const handleBatchExecute = async () => {
               <div>
                 <Card className="p-4 border-2 border-blue-300 bg-blue-50">
                   <div className="text-xs text-slate-600 mb-2">资金托管账户</div>
-                  <div className="flex items-center gap-0 mb-3">
-                    <span className="text-2xl font-bold text-blue-600">{balance} {tokenSymbol}</span>
-                  </div>
+                  <div className="text-xs text-slate-500 mb-1">余额</div>
+                  {balanceList.length > 0 ? (
+                    balanceList.map((balanceItem, index) => (
+                      <div key={index} className="mb-3">
+                        <div className="flex items-center gap-0">
+                          <span className="text-2xl font-bold text-blue-600">
+                            {balanceItem.balance} {balanceItem.tokenSymbol}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <span>加载余额中...</span>
+                  )}
                   <div className="text-xs text-slate-500 mb-1">账户地址</div>
                   <div className="text-xs text-slate-600 font-mono  break-all">{userAddress}</div>
                 </Card>
@@ -590,7 +612,7 @@ const handleBatchExecute = async () => {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
                           <TableCell className="font-mono text-sm">{tx.terminalId}</TableCell>
-                          <TableCell className="font-semibold text-blue-600">{tx.amount} USDC</TableCell>
+                          <TableCell className="font-semibold text-blue-600">{tx.amount} {tx.tokenSymbol}</TableCell>
                           <TableCell>
                             <a
                               href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
