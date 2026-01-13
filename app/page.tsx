@@ -19,7 +19,7 @@ import {
   Copy,
   Check,
 } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, Fragment } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { set } from "date-fns"
 
@@ -52,6 +52,7 @@ type Transaction = {
   merchantId: string
   terminalId: string
   txHash: string
+  referenceNumber:string
 }
 
 type ApiOrderItem = {
@@ -66,7 +67,7 @@ type ApiOrderItem = {
     merchantId: string
     terminalId: string
     chainTransactionHash: string
-    createdAt:string
+    createdAt: string
     tokenSymbol: string
   }
 }
@@ -86,71 +87,50 @@ export default function WorkflowPage() {
   const [workDate, setWorkDate] = useState(formatDateToYYYYMMDD(new Date()))
   const [lastRefreshTime, setLastRefreshTime] = useState(new Date())
   const [isPaused, setIsPaused] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
+  // const [currentPage, setCurrentPage] = useState(1)
+  type AccountMode = "fund" | "preauth"
+  const [accountMode, setAccountMode] = useState<AccountMode>("fund")
 
-  // const [tasks, setTasks] = useState<WorkflowTask[]>([
-  //   {
-  //     id: "1",
-  //     name: "稳定币交易清分",
-  //     batchNumber: "99",
-  //     settlementDate: "2025/12/11",
-  //     plannedStartTime: "03:00:00",
-  //     actualStartTime: "03:00:12",
-  //     plannedEndTime: "04:00:00",
-  //     actualEndTime: "03:58:45",
-  //     status: "completed",
-  //     hasDownload: false,
-  //   },
-  //   {
-  //     id: "2",
-  //     name: "汇总轧差",
-  //     batchNumber: "99",
-  //     settlementDate: "2025/12/11",
-  //     plannedStartTime: "04:00:00",
-  //     actualStartTime: "04:00:05",
-  //     plannedEndTime: "05:00:00",
-  //     actualEndTime: null,
-  //     status: "error",
-  //     hasDownload: false,
-  //   },
-  //   {
-  //     id: "3",
-  //     name: "清算交易流水文件生成",
-  //     batchNumber: "99",
-  //     settlementDate: "2025/12/11",
-  //     plannedStartTime: "05:00:00",
-  //     actualStartTime: null,
-  //     plannedEndTime: "05:30:00",
-  //     actualEndTime: null,
-  //     status: "pending",
-  //     hasDownload: true,
-  //   },
-  //   {
-  //     id: "4",
-  //     name: "大额划付文件生成",
-  //     batchNumber: "99",
-  //     settlementDate: "2025/12/11",
-  //     plannedStartTime: "05:00:00",
-  //     actualStartTime: null,
-  //     plannedEndTime: "05:30:00",
-  //     actualEndTime: null,
-  //     status: "pending",
-  //     hasDownload: true,
-  //   },
-  // ])
+
   const [tasks, setTasks] = useState<WorkflowTask[]>([])
 
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [totalPages, setTotalPages] = useState(1)
+  // const [transactions, setTransactions] = useState<Transaction[]>([])
+  // const [totalPages, setTotalPages] = useState(1)
   const [filePath, setFilePath] = useState<string>("")
   const pageSize = 5
-  const [balance, setBalance] = useState<string>("1.00") // 初始余额
-  const [tokenSymbol, setTokenSymbol] = useState<string>("USDC") // 初始币种
   const [userAddress, setUserAddress] = useState<string>("0x888...C1D2") // 初始用户地址
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
-  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [balanceList, setBalanceList] = useState<{ tokenSymbol: string; balance: string }[]>([])
+  const [escrowBalances, setEscrowBalances] = useState<{ tokenSymbol: string; balance: string }[]>([])
+  const [ecUserAddress, setEcUserAddress] = useState<string>("0x888...C1D2") // 初始用户地址
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
+  const [linkedList, setLinkedList] = useState<any[]>([])
+  const [relatedTxMap, setRelatedTxMap] = useState<
+    Record<string, Transaction[]>
+  >({})
+  // 预授权
+  const [preAuthPage, setPreAuthPage] = useState(1)
+  const [preAuthList, setPreAuthList] = useState<Transaction[]>([])
+  const [preAuthTotalPages, setPreAuthTotalPages] = useState(1)
+
+  // 清算
+  const [settlePage, setSettlePage] = useState(1)
+  const [settleList, setSettleList] = useState<Transaction[]>([])
+  const [settleTotalPages, setSettleTotalPages] = useState(1)
+  const transactions =
+    accountMode === "preauth"
+      ? preAuthList
+      : settleList
+
+  const currentPage =
+    accountMode === "preauth"
+      ? preAuthPage
+      : settlePage
+
+  const totalPages =
+    accountMode === "preauth"
+      ? preAuthTotalPages
+      : settleTotalPages
+
 
 
   const fetchBalance = async () => {
@@ -161,20 +141,37 @@ export default function WorkflowPage() {
           "Content-Type": "application/json",
           accept: "*/*",
         },
-        body:JSON.stringify({
+        body: JSON.stringify({
           primaryAccountNumber: '625807******4153',
         }), // 和 curl -d '' 一致
       })
       const data = await res.json()
-
+      console.log("getBalance response:", data)
       if (data.statusCode === "00") {
-        const balances = data.data.map((item: any) => ({
-          tokenSymbol: item.tokenSymbol,
-          balance: item.balance,
-        }))
-
+        const rawList = Array.isArray(data.data)
+          ? data.data
+          : data.data
+            ? [data.data]
+            : []
+        const balances = rawList
+          .filter((item: any) => item && item.tokenSymbol && item.balance)
+          .map((item: any) => ({
+            tokenSymbol: item.tokenSymbol,
+            balance: item.balance,
+          }))
         setBalanceList(balances)
-        setUserAddress(data.data[0].userAddress || "0x888...C1D2") // 获取用户地址
+
+        setUserAddress(
+          rawList.find((item: any) => item?.userAddress)?.userAddress ||
+          "0x888...C1D2"
+        )
+        // const balances = data.data.map((item: any) => ({
+        //   tokenSymbol: item.tokenSymbol,
+        //   balance: item.balance,
+        // }))
+
+        // setBalanceList(balances)
+        // setUserAddress(data.data[0].userAddress || "0x888...C1D2") // 获取用户地址
       } else {
         console.log("获取余额失败，请稍后重试")
       }
@@ -182,89 +179,215 @@ export default function WorkflowPage() {
       console.error("获取余额失败", error)
     }
   }
+  const fetchEscrowBalance = async () => {
+    const res = await fetch("http://172.20.10.6:8088/api/operator/escrowBalance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
 
-function formatDateToYYYYMMDD(date: Date): string {
+    const data = await res.json()
+    // if (json.statusCode !== "00") return
+    console.log("预授权余额:", data)
+    // setEscrowBalances(json.data)
+    if (data.statusCode === "00") {
+      const rawList = Array.isArray(data.data)
+        ? data.data
+        : data.data
+          ? [data.data]
+          : []
+      const balances = rawList
+        .filter((item: any) => item && item.tokenSymbol && item.balance)
+        .map((item: any) => ({
+          tokenSymbol: item.tokenSymbol,
+          balance: item.balance,
+        }))
+      setEscrowBalances(balances)
+      console.log("预授权余额列表:", balances)
+      setEcUserAddress(
+        rawList.find((item: any) => item?.userAddress)?.userAddress ||
+        "0x888...C1D2"
+      )
+    }
+  }
+
+  useEffect(() => {
+    if (accountMode === "fund") {
+      fetchBalance()
+      fetchTransactions(1)
+    } else {
+      fetchEscrowBalance()
+      fetchPreAuthTransactions(1)
+    }
+  }, [accountMode])
+  useEffect(() => {
+    console.log("关联交易列表更新:", relatedTxMap)
+  },[relatedTxMap])
+
+  const fetchPreAuthTransactions = async (page: number) => {
+    const res = await fetch("http://172.20.10.6:8088/admin/queryPreAuthList", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageNum: page, pageSize }),
+    })
+
+    // const json = await res.json()
+    // if (json.statusCode !== "00") return
+
+    // const list = json.data.list.map((item: any) => ({
+    //   ...item.offChain,
+    //   orderState: item.orderState,
+    // }))
+
+    const result: ApiOrderResponse = await res.json()
+
+    if (result.statusCode !== "00") return
+
+    const list: Transaction[] = result.data.list.map((item) => {
+      const off = item.offChain
+
+      return {
+        id: String(off.id),
+        time: off.createdAt,
+        orderId: off.referenceNumber,
+        type: item.orderState,
+        amount: off.transactionAmount,
+        amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
+        merchantId: off.merchantId || "--",
+        terminalId: off.terminalId || "--",
+        txHash: off.chainTransactionHash,
+        tokenSymbol: off.tokenSymbol || "USDC",
+        referenceNumber: off.referenceNumber,
+      }
+    })
+    setPreAuthList(list)
+    setPreAuthTotalPages(Math.ceil(result.data.totalNum / pageSize))
+  }
+const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
+  const res = await fetch(
+    "http://172.20.10.6:8088/admin/queryPreAuthLink",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ referenceNumber }),
+    }
+  )
+
+  const json = await res.json()
+  console.log("关联交易响应:", json)
+
+  if (json.statusCode === "00") {
+    const list: Transaction[] = json.data.map((item: any) => {
+      const off = item.offChain
+
+      return {
+        id: String(off.id), // ✅ 唯一
+        time: off.createdAt,
+        orderId: off.referenceNumber,
+        type: item.orderState,
+        amount: off.transactionAmount,
+        amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
+        merchantId: off.merchantId || "--",
+        terminalId: off.terminalId || "--",
+        txHash: off.chainTransactionHash,
+        tokenSymbol: off.tokenSymbol || "USDT",
+        referenceNumber: off.referenceNumber,
+      }
+    })
+
+    setRelatedTxMap((prev) => ({
+      ...prev,
+      [id]: list,
+    }))
+  }
+}
+
+
+  function formatDateToYYYYMMDD(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0'); // 月份是从0开始的，所以要加1
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}${month}${day}`;
-}
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-const shortenHash = (hash: string, start = 6, end = 6) => {
-  if (!hash) return "--"
-  if (hash.length <= start + end) return hash
-  return `${hash.slice(0, start)}...${hash.slice(-end)}`
-}
-
-const handleBatchExecute = async () => {
-  try {
-    // ① 调接口 A
-    const res = await fetch(
-      "http://172.20.10.6:8088/settleTask/init",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          settleDt: workDate,
-          jobNo: 0,
-        }),
-      }
-    )
-
-    const result = await res.json()
-    await sleep(1000)
-    if (result.statusCode !== "00") {
-      setTasks([])
-      return
-    }
-
-    const list: WorkflowTask[] = result.data.map((item: any) => ({
-      id: String(item.id),
-      name: item.jobName,
-      batchNumber: String(item.jobCode),
-      settlementDate: `${item.settleDt.slice(0, 4)}/${item.settleDt.slice(4, 6)}/${item.settleDt.slice(6, 8)}`,
-      plannedStartTime: item.planStartTime,
-      actualStartTime: item.realStartTime ?? null,
-      plannedEndTime: item.planEndTime,
-      actualEndTime: item.realEndTime ?? null,
-      status: mapTaskStatus(item.status),
-      hasDownload: Boolean(item.filePath),
-      filePath: item.filePath ? item.filePath : "",
-    }))
-
-    setTasks(list)
-    const jobList: { jobNo: number; state: number }[] = result.data
-
-    // ② 按顺序串行执行
-    for (let i=0; i<5; i++) {
-      const success = await handleStepExecute(
-        workDate,
-        i+""
-      )
-      await sleep(1000) // 每步间隔 1 秒
-      fetchWorkflowTasks(workDate)
-      // ❗ 如果你希望“失败就中断”
-      if (!success) {
-        console.warn(`作业 ${i} 执行失败，停止后续执行`)
-        break
-      }
-    }
-
-    // ③ 最终刷新一次（强烈建议）
-    //fetchWorkflowTasks(workDate)
-  } catch (error) {
-    console.error("场次执行失败", error)
   }
-}
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+  const shortenHash = (hash: string, start = 6, end = 6) => {
+    if (!hash) return "--"
+    if (hash.length <= start + end) return hash
+    return `${hash.slice(0, start)}...${hash.slice(-end)}`
+  }
+
+  const handleBatchExecute = async () => {
+    try {
+      // ① 调接口 A
+      const res = await fetch(
+        "http://172.20.10.6:8088/settleTask/init",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            settleDt: workDate,
+            jobNo: 0,
+          }),
+        }
+      )
+
+      const result = await res.json()
+      await sleep(1000)
+      if (result.statusCode !== "00") {
+        setTasks([])
+        return
+      }
+
+      const list: WorkflowTask[] = result.data.map((item: any) => ({
+        id: String(item.id),
+        name: item.jobName,
+        batchNumber: String(item.jobCode),
+        settlementDate: `${item.settleDt.slice(0, 4)}/${item.settleDt.slice(4, 6)}/${item.settleDt.slice(6, 8)}`,
+        plannedStartTime: item.planStartTime,
+        actualStartTime: item.realStartTime ?? null,
+        plannedEndTime: item.planEndTime,
+        actualEndTime: item.realEndTime ?? null,
+        status: mapTaskStatus(item.status),
+        hasDownload: Boolean(item.filePath),
+        filePath: item.filePath ? item.filePath : "",
+      }))
+
+      setTasks(list)
+      const jobList: { jobNo: number; state: number }[] = result.data
+
+      // ② 按顺序串行执行
+      for (let i = 0; i < 5; i++) {
+        const success = await handleStepExecute(
+          workDate,
+          i + ""
+        )
+        await sleep(1000) // 每步间隔 1 秒
+        fetchWorkflowTasks(workDate)
+        // ❗ 如果你希望“失败就中断”
+        if (!success) {
+          console.warn(`作业 ${i} 执行失败，停止后续执行`)
+          break
+        }
+      }
+
+      // ③ 最终刷新一次（强烈建议）
+      //fetchWorkflowTasks(workDate)
+    } catch (error) {
+      console.error("场次执行失败", error)
+    }
+  }
   // 页面加载时，获取余额
   useEffect(() => {
     fetchBalance()
   }, [])
   useEffect(() => {
-    fetchTransactions(currentPage)
-  }, [currentPage])
+    fetchPreAuthTransactions(preAuthPage)
+  }, [preAuthPage])
+
+  useEffect(() => {
+    fetchTransactions(settlePage)
+  }, [settlePage])
   const handleRefresh = () => {
     setLastRefreshTime(new Date())
   }
@@ -272,6 +395,9 @@ const handleBatchExecute = async () => {
     fetchWorkflowTasks(workDate)
   }, [])
 
+  useEffect(() => {
+    setExpandedOrder(null)
+  }, [accountMode, preAuthPage])
   const handleWorkDateChange = (newDate: string) => {
     setWorkDate(newDate)
     //const formattedDate = `${newDate.slice(0, 4)}/${newDate.slice(4, 6)}/${newDate.slice(6, 8)}`
@@ -284,9 +410,9 @@ const handleBatchExecute = async () => {
   }
 
   const handleStepExecute = async (
-  settle_dt: string,
-  batchNo: string
-): Promise<boolean> =>  {
+    settle_dt: string,
+    batchNo: string
+  ): Promise<boolean> => {
     const settleDt = settle_dt.replaceAll("/", "")
     // ① 先把当前任务状态改为【执行中】
     setTasks((prev) =>
@@ -406,23 +532,23 @@ const handleBatchExecute = async () => {
 
 
 
-  const handleCopy = async (text: string, field: string) => {
+  // const handleCopy = async (text: string, field: string) => {
 
-    try {
+  //   try {
 
-      await navigator.clipboard.writeText(text)
+  //     await navigator.clipboard.writeText(text)
 
-      setCopiedField(field)
+  //     setCopiedField(field)
 
-      setTimeout(() => setCopiedField(null), 2000)
+  //     setTimeout(() => setCopiedField(null), 2000)
 
-    } catch (error) {
+  //   } catch (error) {
 
-      console.error("[v0] Failed to copy:", error)
+  //     console.error("[v0] Failed to copy:", error)
 
-    }
+  //   }
 
-  }
+  // }
 
   const getStatusBadge = (status: TaskStatus) => {
     const statusConfig = {
@@ -465,19 +591,20 @@ const handleBatchExecute = async () => {
           id: String(off.id),
           time: off.createdAt,
           orderId: off.referenceNumber,
-          type: item.orderState ,
+          type: item.orderState,
           amount: off.transactionAmount,
           amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
           merchantId: off.merchantId || "--",
           terminalId: off.terminalId || "--",
           txHash: off.chainTransactionHash,
-          tokenSymbol:off.tokenSymbol || "USDC",
+          tokenSymbol: off.tokenSymbol || "USDC",
+          referenceNumber: off.referenceNumber,
         }
       })
 
-      setTransactions(list)
+      setSettleList(list)
       console.log("交易列表：", list)
-      setTotalPages(Math.ceil(result.data.totalNum / pageSize))
+      setSettleTotalPages(Math.ceil(result.data.totalNum / pageSize))
     } catch (error) {
       console.error("查询交易列表失败", error)
     }
@@ -514,7 +641,7 @@ const handleBatchExecute = async () => {
       actualStartTime: item.realStartTime ?? null,
       plannedEndTime: item.planEndTime,
       actualEndTime: item.realEndTime ?? null,
-      status: mapTaskStatus(item.status+""),
+      status: mapTaskStatus(item.status + ""),
       hasDownload: Boolean(item.filePath),
       filePath: item.filePath ? item.filePath : "",
     }))
@@ -540,6 +667,70 @@ const handleBatchExecute = async () => {
     return time || <span className="text-muted-foreground">--</span>
   }
 
+  function RelatedTxTable({ list }: { list: Transaction[] }) {
+    if (!list.length) {
+      return (
+        <div className="text-sm text-slate-500">
+          暂无关联交易
+        </div>
+      )
+    }
+
+    return (
+      <table className="w-full text-sm border rounded-lg overflow-hidden">
+        <thead className="bg-slate-100">
+          <tr>
+            <th className="px-3 py-2 text-left">时间</th>
+            <th className="px-3 py-2 text-left">订单号</th>
+            <th className="px-3 py-2 text-left">交易类型</th>
+            <th className="px-3 py-2 text-left">商户号</th>
+            <th className="px-3 py-2 text-left">终端号</th>
+            <th className="px-3 py-2 text-left">金额</th>
+            <th className="px-3 py-2 text-left">区块链交易详情</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((tx) => (
+            <tr key={tx.id} className="border-t">
+              <td className="px-3 py-2 font-mono">
+                {tx.time}
+              </td>
+              <td className="px-3 py-2">
+                {tx.orderId}
+              </td>
+              <td className="px-3 py-2 ">
+                {tx.type}
+              </td>
+              <td className="px-3 py-2 ">
+                {tx.merchantId}
+              </td>
+              <td className="px-3 py-2 ">
+                {tx.terminalId}
+              </td>
+              <td className="px-3 py-2 font-semibold">
+                {tx.amount} {tx.tokenSymbol}
+              </td>
+              <td className="px-3 py-2 font-mono text-xs text-blue-600">
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                >
+                  <span className="font-mono text-xs">
+                    {shortenHash(tx.txHash)}
+                  </span>
+                  <ExternalLink className="size-3" />
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto p-6 max-w-7xl">
@@ -549,32 +740,57 @@ const handleBatchExecute = async () => {
 
         <Card className="mb-8 bg-white shadow-sm border-slate-200">
           <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-semibold text-slate-900">稳定币交易流水</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-900">稳定币交易流水</h2>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() =>
+                  setAccountMode((prev) => (prev === "fund" ? "preauth" : "fund"))
+                }
+              >
+                <ArrowLeftRight className="size-4" />
+                {accountMode === "fund" ? "切换预授权账户" : "切换清算账户"}
+              </Button>
+            </div>
+
           </div>
 
           <div className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
               <div>
-                <Card className="p-4 border-2 border-blue-300 bg-blue-50">
-                  <div className="text-xs text-slate-600 mb-2">资金托管账户</div>
+                {/* Tabs 切换 */}
+
+                {/* 卡片内容 */}
+                <Card className="p-4 border-2">
+                  <div className="text-xs text-slate-600 mb-2">
+                    {accountMode === "fund" ? "资金托管账户" : "预授权托管账户"}
+                  </div>
+
                   <div className="text-xs text-slate-500 mb-1">余额</div>
-                  {balanceList.length > 0 ? (
-                    balanceList.map((balanceItem, index) => (
-                      <div key={index} className="mb-3">
-                        <div className="flex items-center gap-0">
-                          <span className="text-2xl font-bold text-blue-600">
-                            {balanceItem.balance} {balanceItem.tokenSymbol}
-                          </span>
-                        </div>
+
+                  {(accountMode === "fund" ? balanceList : escrowBalances).map(
+                    (item, idx) => (
+                      <div key={idx} className="mb-2">
+                        <span className="text-2xl font-bold text-blue-600">
+                          {item.balance} {item.tokenSymbol}
+                        </span>
                       </div>
-                    ))
-                  ) : (
-                    <span>加载余额中...</span>
+                    )
                   )}
-                  <div className="text-xs text-slate-500 mb-1">账户地址</div>
-                  <div className="text-xs text-slate-600 font-mono  break-all">{userAddress}</div>
+
+                  <div className="text-xs text-slate-500 mt-3 mb-1">账户地址</div>
+                  <div className="text-xs font-mono break-all">
+                    {accountMode === "fund"
+                      ? userAddress
+                      : ecUserAddress || "--"}
+                  </div>
                 </Card>
+
               </div>
+
 
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -591,52 +807,95 @@ const handleBatchExecute = async () => {
                         <TableHead className="font-semibold text-slate-700">终端号</TableHead>
                         <TableHead className="font-semibold text-slate-700">用户付款金额</TableHead>
                         <TableHead className="font-semibold text-slate-700">区块链交易详情</TableHead>
+                        {accountMode === "preauth" && (
+                          <TableHead className="font-semibold text-slate-700">操作</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {transactions.map((tx) => (
-                        <TableRow key={tx.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono text-sm">{tx.time}</TableCell>
-                          <TableCell className="font-medium">{tx.orderId}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                tx.type === "完成"
-                                  ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                                  : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                              }
-                            >
-                              {tx.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
-                          <TableCell className="font-mono text-sm">{tx.terminalId}</TableCell>
-                          <TableCell className="font-semibold text-blue-600">{tx.amount} {tx.tokenSymbol}</TableCell>
-                          <TableCell>
-                            <a
-                              href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                              title={tx.txHash} // hover 显示完整 hash
-                            >
-                              <span className="font-mono text-xs">
-                                {shortenHash(tx.txHash)}
-                              </span>
-                              <ExternalLink className="size-3" />
-                            </a>
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={tx.id}>
+                          {/* 主交易行 */}
+                          <TableRow className="hover:bg-slate-50/50">
+                            <TableCell className="font-mono text-sm">{tx.time}</TableCell>
+                            <TableCell className="font-medium">{tx.orderId}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  tx.type === "完成"
+                                    ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                }
+                              >
+                                {tx.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
+                            <TableCell className="font-mono text-sm">{tx.terminalId}</TableCell>
+                            <TableCell className="font-semibold text-blue-600">
+                              {tx.amount} {tx.tokenSymbol}
+                            </TableCell>
+                            <TableCell>
+                              <a
+                                href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                              >
+                                <span className="font-mono text-xs">
+                                  {shortenHash(tx.txHash)}
+                                </span>
+                                <ExternalLink className="size-3" />
+                              </a>
+                            </TableCell>
+
+                            {accountMode === "preauth" && (
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="link"
+                                  onClick={() => {
+                                    setExpandedOrder(expandedOrder === tx.id ? null : tx.id)
+                                    fetchPreAuthLink(tx.id,tx.referenceNumber)
+                                  }}
+                                >
+                                  {expandedOrder === tx.id ? "收起" : "查看关联交易"}
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+
+                          {/* ✅ 展开行：必须是同级 */}
+                          {accountMode === "preauth" && expandedOrder === tx.id && (
+                            <TableRow className="bg-slate-50">
+                              <TableCell colSpan={8}>
+                                {/* 这里放你的小表格 or loading */}
+                                <div className="p-3 text-sm text-slate-600">
+                                  <RelatedTxTable
+                                    list={relatedTxMap[tx.id] || []}
+                                  />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
                       ))}
                     </TableBody>
+
                   </Table>
                 </div>
                 <div className="flex items-center justify-center gap-2 mt-4">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    onClick={() => {
+                      if (accountMode === "preauth") {
+                        setPreAuthPage(Math.max(1, currentPage - 1))
+                      } else {
+                        setSettlePage(Math.max(1, currentPage - 1))
+                      }
+                    }}
                     disabled={currentPage === 1}
                   >
                     <ChevronLeft className="size-4" />
@@ -646,7 +905,13 @@ const handleBatchExecute = async () => {
                       key={i + 1}
                       size="sm"
                       variant={currentPage === i + 1 ? "default" : "outline"}
-                      onClick={() => setCurrentPage(i + 1)}
+                      onClick={() => {
+                        if (accountMode === "preauth") {
+                          setPreAuthPage(i + 1)
+                        } else {
+                          setSettlePage(i + 1)
+                        }
+                      }}
                     >
                       {i + 1}
                     </Button>
@@ -654,7 +919,13 @@ const handleBatchExecute = async () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    onClick={() => {
+                      if (accountMode === "preauth") {
+                        setPreAuthPage(Math.min(totalPages, currentPage + 1))
+                      } else {
+                        setSettlePage(Math.min(totalPages, currentPage + 1))
+                      }
+                    }}
                     disabled={currentPage === totalPages}
                   >
                     <ChevronRight className="size-4" />
@@ -693,7 +964,7 @@ const handleBatchExecute = async () => {
                   placeholder="YYYYMMDD"
                 />
               </div>
-              
+
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <Button
                   size="sm"
