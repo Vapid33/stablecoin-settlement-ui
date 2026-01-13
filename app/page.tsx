@@ -801,7 +801,7 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
                         <TableHead className="font-semibold text-slate-700">时间</TableHead>
-                        <TableHead className="font-semibold text-slate-700">订单号/Tx</TableHead>
+                        <TableHead className="font-semibold text-slate-700">订单号</TableHead>
                         <TableHead className="font-semibold text-slate-700">交易类型</TableHead>
                         <TableHead className="font-semibold text-slate-700">商户号</TableHead>
                         <TableHead className="font-semibold text-slate-700">终端号</TableHead>
