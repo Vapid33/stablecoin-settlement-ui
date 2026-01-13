@@ -759,14 +759,14 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr] gap-6">
               <div>
                 {/* Tabs 切换 */}
 
                 {/* 卡片内容 */}
-                <Card className="p-4 border-2">
+                <Card className="p-3 border-2">
                   <div className="text-xs text-slate-600 mb-2">
-                    {accountMode === "fund" ? "资金托管账户" : "预授权托管账户"}
+                    {accountMode === "fund" ? "清算账户" : "预授权托管账户"}
                   </div>
 
                   <div className="text-xs text-slate-500 mb-1">余额</div>
@@ -774,7 +774,7 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                   {(accountMode === "fund" ? balanceList : escrowBalances).map(
                     (item, idx) => (
                       <div key={idx} className="mb-2">
-                        <span className="text-2xl font-bold text-blue-600">
+                        <span className="text-xs font-bold ">
                           {item.balance} {item.tokenSymbol}
                         </span>
                       </div>
@@ -796,7 +796,7 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-base font-medium text-slate-700">交易历史记录</h3>
                 </div>
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg overflow-x-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
@@ -817,7 +817,7 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                         <Fragment key={tx.id}>
                           {/* 主交易行 */}
                           <TableRow className="hover:bg-slate-50/50">
-                            <TableCell className="font-mono text-sm">{tx.time}</TableCell>
+                            <TableCell className="font-mono text-xs whitespace-nowrap">{tx.time}</TableCell>
                             <TableCell className="font-medium">{tx.orderId}</TableCell>
                             <TableCell>
                               <Badge
@@ -831,8 +831,8 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                                 {tx.type}
                               </Badge>
                             </TableCell>
-                            <TableCell className="font-mono text-sm">{tx.merchantId}</TableCell>
-                            <TableCell className="font-mono text-sm">{tx.terminalId}</TableCell>
+                            <TableCell className="font-mono text-xs max-w-[120px] truncate">{tx.merchantId}</TableCell>
+                            <TableCell className="font-mono ttext-xs max-w-[120px] truncate">{tx.terminalId}</TableCell>
                             <TableCell className="font-semibold text-blue-600">
                               {tx.amount} {tx.tokenSymbol}
                             </TableCell>
