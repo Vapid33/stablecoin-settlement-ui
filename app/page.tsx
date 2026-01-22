@@ -52,7 +52,7 @@ type Transaction = {
   merchantId: string
   terminalId: string
   txHash: string
-  referenceNumber:string
+  referenceNumber: string
 }
 
 type ApiOrderItem = {
@@ -83,12 +83,73 @@ type ApiOrderResponse = {
   msg: string
 }
 
+type EscrowBalanceRecord = {
+  id: string
+  time: string
+  orderId: string
+  type: string
+  merchantId: string
+  terminalId: string
+  userChange: number
+  escrowChange: number
+  merchantChange: number
+  tokenSymbol: string
+  txHash: string
+}
+
+type CardholderAccount = {
+  id: string
+  tokenNo: string
+  chainType: string
+  walletAddress: string
+  userName: string
+  idNo: string
+  phone: string
+  extraInfo?: string
+}
+
+type MerchantAccount = {
+  id: string
+  merchantName: string
+  merchantId: string
+  merchantNumber: string
+  merchantAddress: string
+}
+
+type CardholderTxRecord = {
+
+  offChain: {
+    time: string
+    referenceNumber: string
+    txHash: string
+  }
+  userAccountChanges: number
+  escrowAccountChanges: number
+  merchantAccountChanges: number
+  orderState: string
+}
+
+type MerchantTxRecord = {
+  offChain: {
+    time: string
+    referenceNumber: string
+    merchantId: string
+    terminalId: string
+    txHash: string
+  }
+  userAccountChanges: number
+  escrowAccountChanges: number
+  merchantAccountChanges: number
+  orderState: string
+}
+
+
 export default function WorkflowPage() {
   const [workDate, setWorkDate] = useState(formatDateToYYYYMMDD(new Date()))
   const [lastRefreshTime, setLastRefreshTime] = useState(new Date())
   const [isPaused, setIsPaused] = useState(false)
   // const [currentPage, setCurrentPage] = useState(1)
-  type AccountMode = "fund" | "preauth"
+  type AccountMode = "fund" | "preauth" | "escrowRecord"
   const [accountMode, setAccountMode] = useState<AccountMode>("fund")
 
 
@@ -116,6 +177,29 @@ export default function WorkflowPage() {
   const [settlePage, setSettlePage] = useState(1)
   const [settleList, setSettleList] = useState<Transaction[]>([])
   const [settleTotalPages, setSettleTotalPages] = useState(1)
+  const [escrowRecordPage, setEscrowRecordPage] = useState(1)
+  const [escrowRecordList, setEscrowRecordList] = useState<EscrowBalanceRecord[]>([])
+  const [escrowRecordTotalPages, setEscrowRecordTotalPages] = useState(1)
+  type EscrowAccountType =
+    | "cardholder"   // 持卡人 Web3 账户
+    | "contract"     // 预授权智能合约账户
+    | "merchant"     // 商户账户
+
+  const [escrowAccountType, setEscrowAccountType] = useState<EscrowAccountType>("cardholder")
+  // 托管账户列表
+  const [cardholderAccountList, setCardholderAccountList] = useState<CardholderAccount[]>([])
+  const [merchantAccountList, setMerchantAccountList] = useState<MerchantAccount[]>([])
+
+  // 交易明细弹窗
+  const [txDetailOpen, setTxDetailOpen] = useState(false)
+  const [txDetailList, setTxDetailList] = useState<CardholderTxRecord[] | MerchantTxRecord[]>([])
+  const [txDetailTitle, setTxDetailTitle] = useState("")
+  const [currentAccountAddress, setCurrentAccountAddress] = useState<string>("")
+type TxDetailType = "cardholder" | "merchant"
+
+const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
+
+
   const transactions =
     accountMode === "preauth"
       ? preAuthList
@@ -214,14 +298,86 @@ export default function WorkflowPage() {
     if (accountMode === "fund") {
       fetchBalance()
       fetchTransactions(1)
-    } else {
+    } else if (accountMode === "preauth") {
       fetchEscrowBalance()
       fetchPreAuthTransactions(1)
+    } else if (accountMode === "escrowRecord") {
+      //fetchEscrowBalance()
+      fetchEscrowBalanceRecords(1)
     }
   }, [accountMode])
+
   useEffect(() => {
     console.log("关联交易列表更新:", relatedTxMap)
-  },[relatedTxMap])
+  }, [relatedTxMap])
+
+  useEffect(() => {
+    if (accountMode !== "escrowRecord") return
+
+    if (escrowAccountType === "cardholder") {
+      fetchCardholderAccountList() // 接口 A
+    } else if (escrowAccountType === "contract") {
+      fetchEscrowBalanceRecords(1) // 接口 B（你已有）
+    } else if (escrowAccountType === "merchant") {
+      fetchMerchantAccountList() // 接口 C
+    }
+  }, [accountMode, escrowAccountType])
+
+  const fetchCardholderAccountList = async () => {
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryUserList",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageNum: 1,
+          pageSize: 10,
+        }),
+      }
+    )
+
+    const json = await res.json()
+    if (json.statusCode !== "00") return
+
+    const list: CardholderAccount[] = json.data.list.map((item: any) => ({
+      id: item.cardToken,
+      tokenNo: item.cardToken,
+      chainType: item.chainName,
+      walletAddress: item.chainWalletAddress,
+      userName: item.userName,
+      idNo: item.idNumber,
+      phone: item.mobileNo,
+      extraInfo: item.userOtherInfo,
+    }))
+
+    setCardholderAccountList(list)
+  }
+  const fetchMerchantAccountList = async () => {
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryMerchantList",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageNum: 1,
+          pageSize: 10,
+        }),
+      }
+    )
+
+    const json = await res.json()
+    if (json.statusCode !== "00") return
+
+    const list: MerchantAccount[] = json.data.map((item: any) => ({
+      id: String(item.merchantId),
+      merchantName: item.merchantName,
+      merchantId: item.merchantId,
+      merchantNumber:item.merchantNumber,
+      merchantAddress: item.merchantAddress,
+    }))
+
+    setMerchantAccountList(list)
+  }
 
   const fetchPreAuthTransactions = async (page: number) => {
     const res = await fetch("http://172.20.10.6:8088/admin/queryPreAuthList", {
@@ -262,44 +418,155 @@ export default function WorkflowPage() {
     setPreAuthList(list)
     setPreAuthTotalPages(Math.ceil(result.data.totalNum / pageSize))
   }
-const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
-  const res = await fetch(
-    "http://172.20.10.6:8088/admin/queryPreAuthLink",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ referenceNumber }),
+  const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryPreAuthLink",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referenceNumber }),
+      }
+    )
+
+    const json = await res.json()
+    console.log("关联交易响应:", json)
+
+    if (json.statusCode === "00") {
+      const list: Transaction[] = json.data.map((item: any) => {
+        const off = item.offChain
+
+        return {
+          id: String(off.id), // ✅ 唯一
+          time: off.createdAt,
+          orderId: off.referenceNumber,
+          type: item.orderState,
+          amount: off.transactionAmount,
+          amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
+          merchantId: off.merchantId || "--",
+          terminalId: off.terminalId || "--",
+          txHash: off.chainTransactionHash,
+          tokenSymbol: off.tokenSymbol || "USDT",
+          referenceNumber: off.referenceNumber,
+        }
+      })
+
+      setRelatedTxMap((prev) => ({
+        ...prev,
+        [id]: list,
+      }))
     }
-  )
+  }
 
-  const json = await res.json()
-  console.log("关联交易响应:", json)
+  const fetchEscrowBalanceRecords = async (page: number) => {
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryPreAuthBalance",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageNum: page,
+          pageSize,
+        }),
+      }
+    )
 
-  if (json.statusCode === "00") {
-    const list: Transaction[] = json.data.map((item: any) => {
+    const result = await res.json()
+    if (result.statusCode !== "00") return
+
+    const list: EscrowBalanceRecord[] = result.data.list.map((item: any) => {
       const off = item.offChain
-
       return {
-        id: String(off.id), // ✅ 唯一
+        id: off.referenceNumber + off.createdAt,
         time: off.createdAt,
         orderId: off.referenceNumber,
         type: item.orderState,
-        amount: off.transactionAmount,
-        amountCNY: Number((off.transactionAmount * 7.06).toFixed(2)),
-        merchantId: off.merchantId || "--",
-        terminalId: off.terminalId || "--",
+        merchantId: off.merchantId,
+        terminalId: off.terminalId,
+        userChange: item.userAccountChanges,
+        escrowChange: item.escrowAccountChanges,
+        merchantChange: item.merchantAccountChanges,
+        tokenSymbol: off.tokenSymbol,
         txHash: off.chainTransactionHash,
-        tokenSymbol: off.tokenSymbol || "USDT",
-        referenceNumber: off.referenceNumber,
       }
     })
 
-    setRelatedTxMap((prev) => ({
-      ...prev,
-      [id]: list,
-    }))
+    setEscrowRecordList(list)
+    setEscrowRecordTotalPages(
+      Math.ceil(result.data.totalNum / pageSize)
+    )
   }
-}
+  const handleViewCardholderTxDetail = async (item: CardholderAccount) => {
+    setTxDetailOpen(true)
+    setTxDetailTitle("持卡人账户交易明细")
+    setTxDetailList([])
+    setTxDetailType("cardholder")
+    setCurrentAccountAddress(item.walletAddress)
+
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryUserBalance",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageNum: 1,
+          pageSize: 10,
+          cardToken: item.tokenNo,
+        }),
+      }
+    )
+
+    const json = await res.json()
+    if (json.statusCode !== "00") return
+
+    const list: CardholderTxRecord[] = json.data.list.map((tx: any) => ({
+      userAccountChanges: tx.userAccountChanges,
+      orderState: tx.orderState,
+      offChain: {   
+        time: tx.offChain.createdAt,
+        referenceNumber: tx.offChain.referenceNumber,
+        txHash: tx.offChain.chainTransactionHash,
+      }
+    }))
+
+    setTxDetailList(list)
+  }
+  const handleViewMerchantTxDetail = async (item: MerchantAccount) => {
+    setTxDetailOpen(true)
+    setTxDetailTitle("商户账户交易明细")
+    setTxDetailList([])
+    setTxDetailType("merchant")
+
+    const res = await fetch(
+      "http://172.20.10.6:8088/admin/queryMerchantBalance",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: item.merchantId,
+          pageNum: 1,
+          pageSize: 10,
+        }),
+      }
+    )
+
+    const json = await res.json()
+    if (json.statusCode !== "00") return
+
+    const list: MerchantTxRecord[] = json.data.list.map((tx: any) => ({
+      merchantAccountChanges: tx.merchantAccountChanges,
+      orderState: tx.orderState,
+      offChain: {   
+        time: tx.offChain.createdAt,
+        referenceNumber: tx.offChain.referenceNumber,
+        merchantId: tx.offChain.merchantId,
+        terminalId: tx.offChain.terminalId,
+        txHash: tx.offChain.chainTransactionHash,
+        
+      }
+    }))
+
+    setTxDetailList(list)
+  }
 
 
   function formatDateToYYYYMMDD(date: Date): string {
@@ -729,6 +996,274 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
       </table>
     )
   }
+  function EscrowBalanceTable({ list }: { list: EscrowBalanceRecord[] }) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>时间</TableHead>
+            <TableHead>订单号</TableHead>
+            <TableHead>交易类型</TableHead>
+            <TableHead>商户号</TableHead>
+            <TableHead>终端号</TableHead>
+            <TableHead>用户账户变动</TableHead>
+            <TableHead>托管账户变动</TableHead>
+            <TableHead>商户账户变动</TableHead>
+            <TableHead>区块链交易详情</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((tx) => (
+            <TableRow key={tx.id}>
+              <TableCell className="font-mono text-xs">{tx.time}</TableCell>
+              <TableCell>{tx.orderId}</TableCell>
+              <TableCell>{tx.type}</TableCell>
+              <TableCell className="font-mono text-xs">{tx.merchantId}</TableCell>
+              <TableCell className="font-mono text-xs">{tx.terminalId}</TableCell>
+
+              <TableCell className={tx.userChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+                {tx.userChange} {tx.tokenSymbol}
+              </TableCell>
+
+              <TableCell className={tx.escrowChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+                {tx.escrowChange} {tx.tokenSymbol}
+              </TableCell>
+
+              <TableCell className={tx.merchantChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+                {tx.merchantChange} {tx.tokenSymbol}
+              </TableCell>
+
+              <TableCell>
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600"
+                >
+                  <span className="font-mono text-xs">
+                    {shortenHash(tx.txHash)}
+                  </span>
+                  <ExternalLink className="size-3" />
+                </a>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+  function CardholderAccountTable({
+    list,
+    onViewDetail,
+  }: {
+    list: CardholderAccount[]
+    onViewDetail: (item: CardholderAccount) => void
+  }) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>卡 TOKEN 号</TableHead>
+            <TableHead>区块链类型</TableHead>
+            <TableHead>钱包地址</TableHead>
+            <TableHead>用户姓名</TableHead>
+            <TableHead>身份证号</TableHead>
+            <TableHead>手机号</TableHead>
+            <TableHead>用户其他信息</TableHead>
+            <TableHead>交易详情</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((item) => (
+            <TableRow key={item.id}>
+              <TableCell>{item.tokenNo}</TableCell>
+              <TableCell>{item.chainType}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {shortenHash(item.walletAddress)}
+              </TableCell>
+              <TableCell>{item.userName}</TableCell>
+              <TableCell>{item.idNo}</TableCell>
+              <TableCell>{item.phone}</TableCell>
+              <TableCell>{item.extraInfo || "--"}</TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="link"
+                  onClick={() => onViewDetail(item)}
+                >
+                  查看交易详情
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+  function MerchantAccountTable({
+    list,
+    onViewDetail,
+  }: {
+    list: MerchantAccount[]
+    onViewDetail: (item: MerchantAccount) => void
+  }) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>商户名称</TableHead>
+            <TableHead>商户号</TableHead>
+            <TableHead>商户联系方式</TableHead>
+            <TableHead>商户地址</TableHead>
+            <TableHead>交易详情</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((m) => (
+            <TableRow key={m.id}>
+              <TableCell>{m.merchantName}</TableCell>
+              <TableCell className="font-mono">{m.merchantId}</TableCell>
+              <TableCell>{m.merchantNumber || "--"}</TableCell>
+              <TableCell>{m.merchantAddress || "--"}</TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant="link"
+                  onClick={() => onViewDetail(m)}
+                >
+                  查看交易详情
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+  function CardholderTxTable({
+  list,
+  accountAddress,
+}: {
+  list: CardholderTxRecord[]
+  accountAddress: string
+}) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>账户地址</TableHead>
+            <TableHead>时间</TableHead>
+            <TableHead>订单号</TableHead>
+            <TableHead>交易类型</TableHead>
+            <TableHead>账户余额变动</TableHead>
+            <TableHead>区块链交易详情</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((tx) => (
+            <TableRow key={tx.offChain.txHash + "-" + tx.offChain.referenceNumber}>
+              <TableCell className="font-mono text-xs">
+                {shortenHash(accountAddress)}
+              </TableCell>
+              <TableCell>{tx.offChain.time}</TableCell>
+              <TableCell>{tx.offChain.referenceNumber}</TableCell>
+              <TableCell>{tx.orderState}</TableCell>
+              <TableCell
+                className={tx.userAccountChanges >= 0 ? "text-emerald-600" : "text-red-600"}
+              >
+                {tx.userAccountChanges}
+              </TableCell>
+              <TableCell>
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${tx.offChain.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {shortenHash(tx.offChain.txHash)}
+                </a>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+  function MerchantTxTable({
+    list,
+  }: {
+    list: MerchantTxRecord[]
+  }) {
+    if (!list.length) {
+      return (
+        <div className="text-sm text-slate-500 py-6 text-center">
+          暂无交易记录
+        </div>
+      )
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>时间</TableHead>
+            <TableHead>订单号</TableHead>
+            <TableHead>交易类型</TableHead>
+            <TableHead>商户号</TableHead>
+            <TableHead>终端号</TableHead>
+            <TableHead>账户余额变动</TableHead>
+            <TableHead>区块链交易详情</TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          {list.map((tx) => (
+            <TableRow key={tx.offChain.txHash + "-" + tx.offChain.referenceNumber}>
+              <TableCell className="font-mono text-xs">
+                {tx.offChain.time}
+              </TableCell>
+
+              <TableCell>{tx.offChain.referenceNumber}</TableCell>
+
+              <TableCell>{tx.orderState}</TableCell>
+
+              <TableCell className="font-mono text-xs">
+                {tx.offChain.merchantId}
+              </TableCell>
+
+              <TableCell className="font-mono text-xs">
+                {tx.offChain.terminalId}
+              </TableCell>
+
+              <TableCell
+                className={
+                  tx.merchantAccountChanges >= 0
+                    ? "text-emerald-600 font-semibold"
+                    : "text-red-600 font-semibold"
+                }
+              >
+                {tx.merchantAccountChanges}
+              </TableCell>
+
+              <TableCell>
+                <a
+                  href={`https://sepolia.etherscan.io/tx/${tx.offChain.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                >
+                  <span className="font-mono text-xs">
+                    {shortenHash(tx.offChain.txHash)}
+                  </span>
+                  <ExternalLink className="size-3" />
+                </a>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+
 
 
   return (
@@ -743,17 +1278,32 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-slate-900">稳定币交易流水</h2>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                onClick={() =>
-                  setAccountMode((prev) => (prev === "fund" ? "preauth" : "fund"))
-                }
-              >
-                <ArrowLeftRight className="size-4" />
-                {accountMode === "fund" ? "切换预授权账户" : "切换清算账户"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={accountMode === "fund" ? "default" : "outline"}
+                  onClick={() => setAccountMode("fund")}
+                >
+                  普通消费查询
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant={accountMode === "preauth" ? "default" : "outline"}
+                  onClick={() => setAccountMode("preauth")}
+                >
+                  预授权消费查询
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant={accountMode === "escrowRecord" ? "default" : "outline"}
+                  onClick={() => setAccountMode("escrowRecord")}
+                >
+                  托管账户查询
+                </Button>
+              </div>
+
             </div>
 
           </div>
@@ -764,11 +1314,11 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                 {/* Tabs 切换 */}
 
                 {/* 卡片内容 */}
-                <Card className="p-3 border-2">
-                  <div className="text-xs text-slate-600 mb-2">
-                    {accountMode === "fund" ? "清算账户" : "预授权托管账户"}
-                  </div>
-
+                {accountMode !== "escrowRecord" ? (
+                  <Card className="p-3 border-2">
+                    <div className="text-xs text-slate-600 mb-2">
+                      {accountMode === "fund" ? "清算账户" : "预授权托管账户"}
+                    </div>
                   <div className="text-xs text-slate-500 mb-1">余额</div>
 
                   {(accountMode === "fund" ? balanceList : escrowBalances).map(
@@ -788,16 +1338,33 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                       : ecUserAddress || "--"}
                   </div>
                 </Card>
-
+                ) : null}
               </div>
 
 
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-base font-medium text-slate-700">交易历史记录</h3>
+                  {accountMode === "escrowRecord" && (
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm text-slate-600">账户类型：</span>
+                      <select
+                        className="border rounded px-3 py-1 text-sm"
+                        value={escrowAccountType}
+                        onChange={(e) =>
+                          setEscrowAccountType(e.target.value as EscrowAccountType)
+                        }
+                      >
+                        <option value="cardholder">持卡人 Web3 账户</option>
+                        <option value="contract">预授权智能合约账户</option>
+                        <option value="merchant">商户账户</option>
+                      </select>
+                    </div>
+                  )}
+
                 </div>
                 <div className="border rounded-lg overflow-x-hidden">
-                  <Table>
+                  {accountMode !== "escrowRecord" ? (<Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
                         <TableHead className="font-semibold text-slate-700">时间</TableHead>
@@ -857,7 +1424,7 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                                   variant="link"
                                   onClick={() => {
                                     setExpandedOrder(expandedOrder === tx.id ? null : tx.id)
-                                    fetchPreAuthLink(tx.id,tx.referenceNumber)
+                                    fetchPreAuthLink(tx.id, tx.referenceNumber)
                                   }}
                                 >
                                   {expandedOrder === tx.id ? "收起" : "查看关联交易"}
@@ -883,7 +1450,28 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
                       ))}
                     </TableBody>
 
-                  </Table>
+                  </Table>) : (
+
+                    <>
+                      {escrowAccountType === "cardholder" && (
+                        <CardholderAccountTable
+                          list={cardholderAccountList}
+                          onViewDetail={handleViewCardholderTxDetail}
+                        />
+                      )}
+
+                      {escrowAccountType === "contract" && (
+                        <EscrowBalanceTable list={escrowRecordList} />
+                      )}
+
+                      {escrowAccountType === "merchant" && (
+                        <MerchantAccountTable
+                          list={merchantAccountList}
+                          onViewDetail={handleViewMerchantTxDetail}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center justify-center gap-2 mt-4">
                   <Button
@@ -1047,6 +1635,24 @@ const fetchPreAuthLink = async (id: string, referenceNumber: string) => {
             </Table>
           </div>
         </Card>
+        <Dialog open={txDetailOpen} onOpenChange={setTxDetailOpen}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>{txDetailTitle}</DialogTitle>
+            </DialogHeader>
+
+            {txDetailType === "cardholder" ? (
+              <CardholderTxTable
+                list={txDetailList as CardholderTxRecord[]}
+                accountAddress={currentAccountAddress}
+              />
+            ) : (
+              <MerchantTxTable
+                list={txDetailList as MerchantTxRecord[]}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
 
     </div>
