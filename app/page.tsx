@@ -1069,7 +1069,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
             <TableHead>用户姓名</TableHead>
             <TableHead>身份证号</TableHead>
             <TableHead>手机号</TableHead>
-            <TableHead>用户其他信息</TableHead>
             <TableHead>交易详情</TableHead>
           </TableRow>
         </TableHeader>
@@ -1084,7 +1083,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
               <TableCell>{item.userName}</TableCell>
               <TableCell>{item.idNo}</TableCell>
               <TableCell>{item.phone}</TableCell>
-              <TableCell>{item.extraInfo || "--"}</TableCell>
               <TableCell>
                 <Button
                   size="sm"
