@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -164,7 +164,7 @@ export default function WorkflowPage() {
   const [escrowBalances, setEscrowBalances] = useState<{ tokenSymbol: string; balance: string }[]>([])
   const [ecUserAddress, setEcUserAddress] = useState<string>("0x888...C1D2") // 初始用户地址
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null)
-  const [linkedList, setLinkedList] = useState<any[]>([])
+  const [detailPage, setDetailPage] = useState(1)
   const [relatedTxMap, setRelatedTxMap] = useState<
     Record<string, Transaction[]>
   >({})
@@ -195,11 +195,15 @@ export default function WorkflowPage() {
   const [txDetailList, setTxDetailList] = useState<CardholderTxRecord[] | MerchantTxRecord[]>([])
   const [txDetailTitle, setTxDetailTitle] = useState("")
   const [currentAccountAddress, setCurrentAccountAddress] = useState<string>("")
-type TxDetailType = "cardholder" | "merchant"
+  const [currentTokenNo, setCurrentTokenNo] = useState<string>("")
+  type TxDetailType = "cardholder" | "merchant"
 
-const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
+  const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
 
-
+  const pagedTxList = useMemo(() => {
+    const start = (detailPage - 1) * pageSize
+    return txDetailList.slice(start, start + pageSize)
+  }, [txDetailList, detailPage])
   const transactions =
     accountMode === "preauth"
       ? preAuthList
@@ -372,7 +376,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
       id: String(item.merchantId),
       merchantName: item.merchantName,
       merchantId: item.merchantId,
-      merchantNumber:item.merchantNumber,
+      merchantNumber: item.merchantNumber,
       merchantAddress: item.merchantAddress,
     }))
 
@@ -501,6 +505,8 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
     setTxDetailList([])
     setTxDetailType("cardholder")
     setCurrentAccountAddress(item.walletAddress)
+    setCurrentTokenNo(item.tokenNo)
+    setDetailPage(1)
 
     const res = await fetch(
       "http://172.20.10.6:8088/admin/queryUserBalance",
@@ -521,7 +527,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
     const list: CardholderTxRecord[] = json.data.list.map((tx: any) => ({
       userAccountChanges: tx.userAccountChanges,
       orderState: tx.orderState,
-      offChain: {   
+      offChain: {
         time: tx.offChain.createdAt,
         referenceNumber: tx.offChain.referenceNumber,
         txHash: tx.offChain.chainTransactionHash,
@@ -535,6 +541,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
     setTxDetailTitle("商户账户交易明细")
     setTxDetailList([])
     setTxDetailType("merchant")
+    setDetailPage(1)
 
     const res = await fetch(
       "http://172.20.10.6:8088/admin/queryMerchantBalance",
@@ -555,13 +562,13 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
     const list: MerchantTxRecord[] = json.data.list.map((tx: any) => ({
       merchantAccountChanges: tx.merchantAccountChanges,
       orderState: tx.orderState,
-      offChain: {   
+      offChain: {
         time: tx.offChain.createdAt,
         referenceNumber: tx.offChain.referenceNumber,
         merchantId: tx.offChain.merchantId,
         terminalId: tx.offChain.terminalId,
         txHash: tx.offChain.chainTransactionHash,
-        
+
       }
     }))
 
@@ -950,8 +957,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
             <th className="px-3 py-2 text-left">时间</th>
             <th className="px-3 py-2 text-left">订单号</th>
             <th className="px-3 py-2 text-left">交易类型</th>
-            <th className="px-3 py-2 text-left">商户号</th>
-            <th className="px-3 py-2 text-left">终端号</th>
             <th className="px-3 py-2 text-left">金额</th>
             <th className="px-3 py-2 text-left">区块链交易详情</th>
           </tr>
@@ -967,12 +972,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
               </td>
               <td className="px-3 py-2 ">
                 {tx.type}
-              </td>
-              <td className="px-3 py-2 ">
-                {tx.merchantId}
-              </td>
-              <td className="px-3 py-2 ">
-                {tx.terminalId}
               </td>
               <td className="px-3 py-2 font-semibold">
                 {tx.amount} {tx.tokenSymbol}
@@ -1004,8 +1003,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
             <TableHead>时间</TableHead>
             <TableHead>订单号</TableHead>
             <TableHead>交易类型</TableHead>
-            <TableHead>商户号</TableHead>
-            <TableHead>终端号</TableHead>
             <TableHead>用户账户变动</TableHead>
             <TableHead>托管账户变动</TableHead>
             <TableHead>商户账户变动</TableHead>
@@ -1018,14 +1015,20 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
               <TableCell className="font-mono text-xs">{tx.time}</TableCell>
               <TableCell>{tx.orderId}</TableCell>
               <TableCell>{tx.type}</TableCell>
-              <TableCell className="font-mono text-xs">{tx.merchantId}</TableCell>
-              <TableCell className="font-mono text-xs">{tx.terminalId}</TableCell>
 
-              <TableCell className={tx.userChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+              <TableCell className={tx.userChange > 0
+                ? "text-emerald-600"
+                : tx.userChange < 0
+                  ? "text-red-600"
+                  : ""}>
                 {tx.userChange} {tx.tokenSymbol}
               </TableCell>
 
-              <TableCell className={tx.escrowChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+              <TableCell className={tx.escrowChange > 0
+                ? "text-emerald-600"
+                : tx.escrowChange < 0
+                  ? "text-red-600"
+                  : ""}>
                 {tx.escrowChange} {tx.tokenSymbol}
               </TableCell>
 
@@ -1065,7 +1068,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
           <TableRow>
             <TableHead>卡 TOKEN 号</TableHead>
             <TableHead>区块链类型</TableHead>
-            <TableHead>钱包地址</TableHead>
+            <TableHead>账户地址</TableHead>
             <TableHead>用户姓名</TableHead>
             <TableHead>身份证号</TableHead>
             <TableHead>手机号</TableHead>
@@ -1139,16 +1142,17 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
     )
   }
   function CardholderTxTable({
-  list,
-  accountAddress,
-}: {
-  list: CardholderTxRecord[]
-  accountAddress: string
-}) {
+    list,
+    accountAddress,
+  }: {
+    list: CardholderTxRecord[]
+    accountAddress: string
+  }) {
     return (
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>卡token</TableHead>
             <TableHead>账户地址</TableHead>
             <TableHead>时间</TableHead>
             <TableHead>订单号</TableHead>
@@ -1160,6 +1164,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
         <TableBody>
           {list.map((tx) => (
             <TableRow key={tx.offChain.txHash + "-" + tx.offChain.referenceNumber}>
+              <TableCell>{currentTokenNo}</TableCell>
               <TableCell className="font-mono text-xs">
                 {shortenHash(accountAddress)}
               </TableCell>
@@ -1167,7 +1172,7 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
               <TableCell>{tx.offChain.referenceNumber}</TableCell>
               <TableCell>{tx.orderState}</TableCell>
               <TableCell
-                className={tx.userAccountChanges >= 0 ? "text-emerald-600" : "text-red-600"}
+                className={tx.userAccountChanges >0 ? "text-emerald-600" : tx.userAccountChanges<0 ? "text-red-600" : ""}
               >
                 {tx.userAccountChanges}
               </TableCell>
@@ -1206,8 +1211,6 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
             <TableHead>时间</TableHead>
             <TableHead>订单号</TableHead>
             <TableHead>交易类型</TableHead>
-            <TableHead>商户号</TableHead>
-            <TableHead>终端号</TableHead>
             <TableHead>账户余额变动</TableHead>
             <TableHead>区块链交易详情</TableHead>
           </TableRow>
@@ -1224,22 +1227,16 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
 
               <TableCell>{tx.orderState}</TableCell>
 
-              <TableCell className="font-mono text-xs">
-                {tx.offChain.merchantId}
-              </TableCell>
-
-              <TableCell className="font-mono text-xs">
-                {tx.offChain.terminalId}
-              </TableCell>
-
               <TableCell
                 className={
-                  tx.merchantAccountChanges >= 0
-                    ? "text-emerald-600 font-semibold"
-                    : "text-red-600 font-semibold"
+                  tx.merchantAccountChanges > 0
+                    ? "text-emerald-600"
+                    : tx.merchantAccountChanges < 0
+                      ? "text-red-600"
+                      : ""
                 }
               >
-                {tx.merchantAccountChanges}
+                ${tx.merchantAccountChanges}
               </TableCell>
 
               <TableCell>
@@ -1306,220 +1303,198 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
 
           </div>
 
-          <div className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr] gap-6">
-              <div>
-                {/* Tabs 切换 */}
+          {/* ================= 页面主体 ================= */}
+          <div className="container mx-auto px-4 py-6">
 
-                {/* 卡片内容 */}
-                {accountMode !== "escrowRecord" ? (
+            {/* ================= 根据 accountMode 切换布局 ================= */}
+            {accountMode === "escrowRecord" ? (
+              /* =========================================================
+                 ✅ 托管账户：全宽布局（无左侧余额）
+              ========================================================= */
+              <div className="w-full">
+
+                {/* ---------- 标题 + 账户类型切换 ---------- */}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base font-medium text-slate-700">
+                    交易历史记录
+                  </h3>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-600">账户类型：</span>
+                    <select
+                      className="border rounded px-3 py-1 text-sm"
+                      value={escrowAccountType}
+                      onChange={(e) =>
+                        setEscrowAccountType(e.target.value as EscrowAccountType)
+                      }
+                    >
+                      <option value="cardholder">持卡人 Web3 账户</option>
+                      <option value="contract">预授权智能合约账户</option>
+                      <option value="merchant">商户账户</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* ---------- 全宽表格 ---------- */}
+                <div className="border rounded-lg overflow-x-hidden">
+                  {escrowAccountType === "cardholder" && (
+                    <CardholderAccountTable
+                      list={cardholderAccountList}
+                      onViewDetail={handleViewCardholderTxDetail}
+                    />
+                  )}
+
+                  {escrowAccountType === "contract" && (
+                    <EscrowBalanceTable list={escrowRecordList} />
+                  )}
+
+                  {escrowAccountType === "merchant" && (
+                    <MerchantAccountTable
+                      list={merchantAccountList}
+                      onViewDetail={handleViewMerchantTxDetail}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* =========================================================
+                 ✅ 其他模式：左右布局（左余额 + 右表格）
+              ========================================================= */
+              <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr] gap-6">
+
+                {/* ================= 左侧：余额卡片 ================= */}
+                <div>
                   <Card className="p-3 border-2">
                     <div className="text-xs text-slate-600 mb-2">
                       {accountMode === "fund" ? "清算账户" : "预授权托管账户"}
                     </div>
-                  <div className="text-xs text-slate-500 mb-1">余额</div>
 
-                  {(accountMode === "fund" ? balanceList : escrowBalances).map(
-                    (item, idx) => (
-                      <div key={idx} className="mb-2">
-                        <span className="text-xs font-bold ">
-                          {item.balance} {item.tokenSymbol}
-                        </span>
-                      </div>
-                    )
-                  )}
+                    <div className="text-xs text-slate-500 mb-1">余额</div>
 
-                  <div className="text-xs text-slate-500 mt-3 mb-1">账户地址</div>
-                  <div className="text-xs font-mono break-all">
-                    {accountMode === "fund"
-                      ? userAddress
-                      : ecUserAddress || "--"}
-                  </div>
-                </Card>
-                ) : null}
-              </div>
+                    {(accountMode === "fund" ? balanceList : escrowBalances).map(
+                      (item, idx) => (
+                        <div key={idx} className="mb-2">
+                          <span className="text-xs font-bold">
+                            {item.balance} {item.tokenSymbol}
+                          </span>
+                        </div>
+                      )
+                    )}
 
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-medium text-slate-700">交易历史记录</h3>
-                  {accountMode === "escrowRecord" && (
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="text-sm text-slate-600">账户类型：</span>
-                      <select
-                        className="border rounded px-3 py-1 text-sm"
-                        value={escrowAccountType}
-                        onChange={(e) =>
-                          setEscrowAccountType(e.target.value as EscrowAccountType)
-                        }
-                      >
-                        <option value="cardholder">持卡人 Web3 账户</option>
-                        <option value="contract">预授权智能合约账户</option>
-                        <option value="merchant">商户账户</option>
-                      </select>
+                    <div className="text-xs text-slate-500 mt-3 mb-1">
+                      账户地址
                     </div>
-                  )}
-
+                    <div className="text-xs font-mono break-all">
+                      {accountMode === "fund"
+                        ? userAddress
+                        : ecUserAddress || "--"}
+                    </div>
+                  </Card>
                 </div>
-                <div className="border rounded-lg overflow-x-hidden">
-                  {accountMode !== "escrowRecord" ? (<Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-700">时间</TableHead>
-                        <TableHead className="font-semibold text-slate-700">订单号</TableHead>
-                        <TableHead className="font-semibold text-slate-700">交易类型</TableHead>
-                        <TableHead className="font-semibold text-slate-700">商户号</TableHead>
-                        <TableHead className="font-semibold text-slate-700">终端号</TableHead>
-                        <TableHead className="font-semibold text-slate-700">用户付款金额</TableHead>
-                        <TableHead className="font-semibold text-slate-700">区块链交易详情</TableHead>
-                        {accountMode === "preauth" && (
-                          <TableHead className="font-semibold text-slate-700">操作</TableHead>
-                        )}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.map((tx) => (
-                        <Fragment key={tx.id}>
-                          {/* 主交易行 */}
-                          <TableRow className="hover:bg-slate-50/50">
-                            <TableCell className="font-mono text-xs whitespace-nowrap">{tx.time}</TableCell>
-                            <TableCell className="font-medium">{tx.orderId}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  tx.type === "完成"
-                                    ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
-                                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                                }
-                              >
-                                {tx.type}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-mono text-xs max-w-[120px] truncate">{tx.merchantId}</TableCell>
-                            <TableCell className="font-mono ttext-xs max-w-[120px] truncate">{tx.terminalId}</TableCell>
-                            <TableCell className="font-semibold text-blue-600">
-                              {tx.amount} {tx.tokenSymbol}
-                            </TableCell>
-                            <TableCell>
-                              <a
-                                href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                              >
-                                <span className="font-mono text-xs">
-                                  {shortenHash(tx.txHash)}
-                                </span>
-                                <ExternalLink className="size-3" />
-                              </a>
-                            </TableCell>
 
-                            {accountMode === "preauth" && (
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="link"
-                                  onClick={() => {
-                                    setExpandedOrder(expandedOrder === tx.id ? null : tx.id)
-                                    fetchPreAuthLink(tx.id, tx.referenceNumber)
-                                  }}
-                                >
-                                  {expandedOrder === tx.id ? "收起" : "查看关联交易"}
-                                </Button>
-                              </TableCell>
-                            )}
-                          </TableRow>
+                {/* ================= 右侧：交易表格 ================= */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-medium text-slate-700">
+                      交易历史记录
+                    </h3>
+                  </div>
 
-                          {/* ✅ 展开行：必须是同级 */}
-                          {accountMode === "preauth" && expandedOrder === tx.id && (
-                            <TableRow className="bg-slate-50">
-                              <TableCell colSpan={8}>
-                                {/* 这里放你的小表格 or loading */}
-                                <div className="p-3 text-sm text-slate-600">
-                                  <RelatedTxTable
-                                    list={relatedTxMap[tx.id] || []}
-                                  />
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                  <div className="border rounded-lg overflow-x-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50 hover:bg-slate-50">
+                          <TableHead>时间</TableHead>
+                          <TableHead>订单号</TableHead>
+                          <TableHead>交易类型</TableHead>
+                          <TableHead>商户号</TableHead>
+                          <TableHead>终端号</TableHead>
+                          <TableHead>用户付款金额</TableHead>
+                          <TableHead>区块链交易详情</TableHead>
+                          {accountMode === "preauth" && (
+                            <TableHead>操作</TableHead>
                           )}
-                        </Fragment>
-                      ))}
-                    </TableBody>
+                        </TableRow>
+                      </TableHeader>
 
-                  </Table>) : (
+                      <TableBody>
+                        {transactions.map((tx) => (
+                          <Fragment key={tx.id}>
+                            {/* ---------- 主交易行 ---------- */}
+                            <TableRow className="hover:bg-slate-50/50">
+                              <TableCell className="font-mono text-xs whitespace-nowrap">
+                                {tx.time}
+                              </TableCell>
+                              <TableCell>{tx.orderId}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {tx.type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {tx.merchantId}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {tx.terminalId}
+                              </TableCell>
+                              <TableCell className="font-semibold text-blue-600">
+                                {tx.amount} {tx.tokenSymbol}
+                              </TableCell>
+                              <TableCell>
+                                <a
+                                  href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-blue-600"
+                                >
+                                  <span className="font-mono text-xs">
+                                    {shortenHash(tx.txHash)}
+                                  </span>
+                                  <ExternalLink className="size-3" />
+                                </a>
+                              </TableCell>
 
-                    <>
-                      {escrowAccountType === "cardholder" && (
-                        <CardholderAccountTable
-                          list={cardholderAccountList}
-                          onViewDetail={handleViewCardholderTxDetail}
-                        />
-                      )}
+                              {accountMode === "preauth" && (
+                                <TableCell>
+                                  <Button
+                                    size="sm"
+                                    variant="link"
+                                    onClick={() => {
+                                      setExpandedOrder(
+                                        expandedOrder === tx.id ? null : tx.id
+                                      )
+                                      fetchPreAuthLink(tx.id, tx.referenceNumber)
+                                    }}
+                                  >
+                                    {expandedOrder === tx.id
+                                      ? "收起"
+                                      : "查看关联交易"}
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
 
-                      {escrowAccountType === "contract" && (
-                        <EscrowBalanceTable list={escrowRecordList} />
-                      )}
-
-                      {escrowAccountType === "merchant" && (
-                        <MerchantAccountTable
-                          list={merchantAccountList}
-                          onViewDetail={handleViewMerchantTxDetail}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center justify-center gap-2 mt-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (accountMode === "preauth") {
-                        setPreAuthPage(Math.max(1, currentPage - 1))
-                      } else {
-                        setSettlePage(Math.max(1, currentPage - 1))
-                      }
-                    }}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                  {[...Array(totalPages)].map((_, i) => (
-                    <Button
-                      key={i + 1}
-                      size="sm"
-                      variant={currentPage === i + 1 ? "default" : "outline"}
-                      onClick={() => {
-                        if (accountMode === "preauth") {
-                          setPreAuthPage(i + 1)
-                        } else {
-                          setSettlePage(i + 1)
-                        }
-                      }}
-                    >
-                      {i + 1}
-                    </Button>
-                  ))}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (accountMode === "preauth") {
-                        setPreAuthPage(Math.min(totalPages, currentPage + 1))
-                      } else {
-                        setSettlePage(Math.min(totalPages, currentPage + 1))
-                      }
-                    }}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="size-4" />
-                  </Button>
+                            {/* ---------- 展开行 ---------- */}
+                            {accountMode === "preauth" &&
+                              expandedOrder === tx.id && (
+                                <TableRow className="bg-slate-50">
+                                  <TableCell colSpan={8}>
+                                    <RelatedTxTable
+                                      list={relatedTxMap[tx.id] || []}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                          </Fragment>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
+
         </Card>
 
         <Card className="bg-white shadow-sm border-slate-200">
@@ -1634,23 +1609,65 @@ const [txDetailType, setTxDetailType] = useState<TxDetailType | null>(null)
           </div>
         </Card>
         <Dialog open={txDetailOpen} onOpenChange={setTxDetailOpen}>
-          <DialogContent className="max-w-5xl">
+          <DialogContent className="w-max max-w-[95vw] min-w-[1000px]">
             <DialogHeader>
               <DialogTitle>{txDetailTitle}</DialogTitle>
             </DialogHeader>
 
+            {/* ====== 交易明细表格（分页数据） ====== */}
             {txDetailType === "cardholder" ? (
               <CardholderTxTable
-                list={txDetailList as CardholderTxRecord[]}
+                list={pagedTxList as CardholderTxRecord[]}
                 accountAddress={currentAccountAddress}
               />
             ) : (
               <MerchantTxTable
-                list={txDetailList as MerchantTxRecord[]}
+                list={pagedTxList as MerchantTxRecord[]}
               />
             )}
+
+            {/* ====== 分页控件 ====== */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-slate-600">
+                共 {txDetailList.length} 条，
+                第 {detailPage} / {Math.ceil(txDetailList.length / pageSize)} 页
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={detailPage === 1}
+                  onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                  上一页
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    detailPage >=
+                    Math.ceil(txDetailList.length / pageSize)
+                  }
+                  onClick={() =>
+                    setDetailPage((p) =>
+                      Math.min(
+                        Math.ceil(txDetailList.length / pageSize),
+                        p + 1
+                      )
+                    )
+                  }
+                >
+                  下一页
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
+
       </div>
 
     </div>
