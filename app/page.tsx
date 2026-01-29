@@ -106,6 +106,8 @@ type CardholderAccount = {
   idNo: string
   phone: string
   extraInfo?: string
+  dynamicKeyCreatedAt: string
+  dynamicKeyExpired: boolean
 }
 
 type MerchantAccount = {
@@ -352,6 +354,8 @@ export default function WorkflowPage() {
       idNo: item.idNumber,
       phone: item.mobileNo,
       extraInfo: item.userOtherInfo,
+      dynamicKeyCreatedAt: item.dynamicKeyCreatedAt,
+      dynamicKeyExpired: item.dynamicKeyExpired,
     }))
 
     setCardholderAccountList(list)
@@ -1072,6 +1076,8 @@ export default function WorkflowPage() {
             <TableHead>用户姓名</TableHead>
             <TableHead>身份证号</TableHead>
             <TableHead>手机号</TableHead>
+            <TableHead>动态密钥创建时间</TableHead>
+            <TableHead>动态密钥是否过期</TableHead>
             <TableHead>交易详情</TableHead>
           </TableRow>
         </TableHeader>
@@ -1086,6 +1092,8 @@ export default function WorkflowPage() {
               <TableCell>{item.userName}</TableCell>
               <TableCell>{item.idNo}</TableCell>
               <TableCell>{item.phone}</TableCell>
+              <TableCell>{item.dynamicKeyCreatedAt}</TableCell>
+              <TableCell>{item.dynamicKeyExpired ? "已过期" : "未过期"}</TableCell>
               <TableCell>
                 <Button
                   size="sm"
