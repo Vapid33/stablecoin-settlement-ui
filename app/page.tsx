@@ -1073,11 +1073,11 @@ export default function WorkflowPage() {
             <TableHead>卡 TOKEN 号</TableHead>
             <TableHead>区块链类型</TableHead>
             <TableHead>账户地址</TableHead>
+            <TableHead>动态密钥创建时间</TableHead>
+            <TableHead>动态密钥是否过期</TableHead>
             <TableHead>用户姓名</TableHead>
             <TableHead>身份证号</TableHead>
             <TableHead>手机号</TableHead>
-            <TableHead>动态密钥创建时间</TableHead>
-            <TableHead>动态密钥是否过期</TableHead>
             <TableHead>交易详情</TableHead>
           </TableRow>
         </TableHeader>
@@ -1089,11 +1089,12 @@ export default function WorkflowPage() {
               <TableCell className="font-mono text-xs">
                 {shortenHash(item.walletAddress)}
               </TableCell>
+              <TableCell>{item.dynamicKeyCreatedAt}</TableCell>
+              <TableCell className={item.dynamicKeyExpired ? "text-red-600" : ""}>{item.dynamicKeyExpired ? "已过期" : "未过期"}</TableCell>
               <TableCell>{item.userName}</TableCell>
               <TableCell>{item.idNo}</TableCell>
               <TableCell>{item.phone}</TableCell>
-              <TableCell>{item.dynamicKeyCreatedAt}</TableCell>
-              <TableCell>{item.dynamicKeyExpired ? "已过期" : "未过期"}</TableCell>
+
               <TableCell>
                 <Button
                   size="sm"
@@ -1180,7 +1181,7 @@ export default function WorkflowPage() {
               <TableCell>{tx.offChain.referenceNumber}</TableCell>
               <TableCell>{tx.orderState}</TableCell>
               <TableCell
-                className={tx.userAccountChanges >0 ? "text-emerald-600" : tx.userAccountChanges<0 ? "text-red-600" : ""}
+                className={tx.userAccountChanges > 0 ? "text-emerald-600" : tx.userAccountChanges < 0 ? "text-red-600" : ""}
               >
                 {tx.userAccountChanges}
               </TableCell>
