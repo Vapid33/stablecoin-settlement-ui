@@ -221,7 +221,30 @@ export default function WorkflowPage() {
       ? preAuthTotalPages
       : settleTotalPages
 
+  type PageTab =
+    | "fund"
+    | "preauth"
+    | "escrowRecord"
+    | "workflow"
 
+  const [pageTab, setPageTab] = useState<PageTab>("fund")
+
+  const TAB_TITLE_MAP: Record<
+  "fund" | "preauth" | "escrowRecord",
+  string
+> = {
+  fund: "普通消费交易流水",
+  preauth: "预授权消费交易流水",
+  escrowRecord: "账户详情",
+}
+
+
+  // 兼容你原有逻辑
+  useEffect(() => {
+    if (pageTab !== "workflow") {
+      setAccountMode(pageTab)
+    }
+  }, [pageTab])
 
   const fetchBalance = async () => {
     try {
@@ -1273,40 +1296,50 @@ export default function WorkflowPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto p-6 max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">稳定币交易运营平台</h1>
-        </div>
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">
+            稳定币交易运营平台
+          </h1>
 
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={pageTab === "fund" ? "default" : "outline"}
+              onClick={() => setPageTab("fund")}
+            >
+              普通消费查询
+            </Button>
+
+            <Button
+              size="sm"
+              variant={pageTab === "preauth" ? "default" : "outline"}
+              onClick={() => setPageTab("preauth")}
+            >
+              预授权查询
+            </Button>
+
+            <Button
+              size="sm"
+              variant={pageTab === "escrowRecord" ? "default" : "outline"}
+              onClick={() => setPageTab("escrowRecord")}
+            >
+              账户查询
+            </Button>
+
+            <Button
+              size="sm"
+              variant={pageTab === "workflow" ? "default" : "outline"}
+              onClick={() => setPageTab("workflow")}
+            >
+              稳定币清结算工作流
+            </Button>
+          </div>
+        </div>
+{pageTab !== "workflow" ? (
         <Card className="mb-8 bg-white shadow-sm border-slate-200">
           <div className="p-6 border-b border-slate-200">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-slate-900">稳定币交易流水</h2>
-
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={accountMode === "fund" ? "default" : "outline"}
-                  onClick={() => setAccountMode("fund")}
-                >
-                  普通消费查询
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant={accountMode === "preauth" ? "default" : "outline"}
-                  onClick={() => setAccountMode("preauth")}
-                >
-                  预授权消费查询
-                </Button>
-
-                <Button
-                  size="sm"
-                  variant={accountMode === "escrowRecord" ? "default" : "outline"}
-                  onClick={() => setAccountMode("escrowRecord")}
-                >
-                  托管账户查询
-                </Button>
-              </div>
+              <h2 className="text-xl font-semibold text-slate-900">{TAB_TITLE_MAP[accountMode]}</h2>
 
             </div>
 
@@ -1324,9 +1357,9 @@ export default function WorkflowPage() {
 
                 {/* ---------- 标题 + 账户类型切换 ---------- */}
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base font-medium text-slate-700">
+                  {/* <h3 className="text-base font-medium text-slate-700">
                     交易历史记录
-                  </h3>
+                  </h3> */}
 
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-slate-600">账户类型：</span>
@@ -1505,7 +1538,7 @@ export default function WorkflowPage() {
           </div>
 
         </Card>
-
+):(
         <Card className="bg-white shadow-sm border-slate-200">
           <div className="p-6 border-b border-slate-200">
             <div className="flex items-center justify-between mb-6">
@@ -1616,7 +1649,7 @@ export default function WorkflowPage() {
               </TableBody>
             </Table>
           </div>
-        </Card>
+        </Card>)}
         <Dialog open={txDetailOpen} onOpenChange={setTxDetailOpen}>
           <DialogContent className="w-max max-w-[95vw] min-w-[1000px]">
             <DialogHeader>
