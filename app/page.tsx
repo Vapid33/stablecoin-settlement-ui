@@ -1059,7 +1059,7 @@ export default function WorkflowPage() {
                 {tx.escrowChange} {tx.tokenSymbol}
               </TableCell>
 
-              <TableCell className={tx.merchantChange >= 0 ? "text-emerald-600" : "text-red-600"}>
+              <TableCell className={tx.merchantChange >0 ? "text-emerald-600" : tx.merchantChange <0 ? "text-red-600" : ""}>
                 {tx.merchantChange} {tx.tokenSymbol}
               </TableCell>
 
@@ -1206,7 +1206,7 @@ export default function WorkflowPage() {
               <TableCell
                 className={tx.userAccountChanges > 0 ? "text-emerald-600" : tx.userAccountChanges < 0 ? "text-red-600" : ""}
               >
-                {tx.userAccountChanges}
+                ${tx.userAccountChanges}
               </TableCell>
               <TableCell>
                 <a
