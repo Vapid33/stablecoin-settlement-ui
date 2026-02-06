@@ -1298,7 +1298,7 @@ export default function WorkflowPage() {
       <div className="container mx-auto p-6 max-w-7xl">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">
-            稳定币交易运营平台
+            稳定币运营管理平台
           </h1>
 
           <div className="flex gap-2">
